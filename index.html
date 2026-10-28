@@ -105,6 +105,17 @@
   .btn-ghost { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; padding-inline: 0.4rem; }
   .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .actions .wide { grid-column: 1 / -1; }
+  .paste-box { margin-top: 0.75rem; padding: 1rem; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+  .paste-box p { margin: 0 0 0.6rem; }
+  .paste-target {
+    min-height: 6.5rem; border-radius: 12px; border: 2px dashed var(--muted);
+    display: grid; place-items: center; padding: 0.5rem; overflow: hidden;
+    color: transparent; caret-color: transparent; -webkit-user-select: text; user-select: text;
+  }
+  .paste-target:empty::before { content: "Paste here"; color: var(--muted); font-weight: 600; }
+  .paste-target:focus { border-color: var(--gold); outline: none; }
+  .paste-target img { max-width: 100%; max-height: 6rem; }
   @media (max-width: 340px) { .actions { grid-template-columns: 1fr; } }
 
   /* ---------- Board ---------- */
@@ -286,8 +297,17 @@
         Scan board
       </button>
       <button id="btn-upload" class="btn" type="button">Upload photo</button>
+      <button id="btn-paste" class="btn wide" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3.8A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7z"/><path d="M9 11h6M9 15h4"/></svg>
+        Paste image
+      </button>
     </div>
-    <p class="tips">Upload photo accepts screenshots and camera pictures, including iPhone HEIC photos. Screenshots read most reliably; when photographing a screen, fill the frame with the board and tilt slightly to avoid glare.</p>
+    <div id="paste-box" class="paste-box" hidden>
+      <p id="paste-help">Long-press in the box and choose Paste.</p>
+      <div id="paste-target" class="paste-target" contenteditable="true" role="textbox" aria-label="Paste an image here" inputmode="none" spellcheck="false"></div>
+      <button id="paste-cancel" class="btn btn-ghost" type="button">Cancel</button>
+    </div>
+    <p class="tips">Upload photo accepts screenshots and camera pictures, including iPhone HEIC photos. Paste image uses whatever image you last copied.<span id="key-hint"></span> Screenshots read most reliably; when photographing a screen, fill the frame with the board and tilt slightly to avoid glare.</p>
   </section>
 
   <section id="result" hidden>
@@ -986,6 +1006,8 @@ const Core = (() => {
   const els = {
     start: $('start'), result: $('result'), demo: $('demo'),
     btnScan: $('btn-scan'), btnUpload: $('btn-upload'), file: $('file'),
+    btnPaste: $('btn-paste'), pasteBox: $('paste-box'), pasteHelp: $('paste-help'), pasteTarget: $('paste-target'),
+    pasteCancel: $('paste-cancel'), keyHint: $('key-hint'),
     camera: $('camera'), video: $('video'), guide: $('guide'), btnShutter: $('btn-shutter'), btnCamClose: $('btn-cam-close'),
     live: $('live'), camHint: $('cam-hint'),
     btnNew: $('btn-new'), board: $('board'), status: $('status'),
@@ -1110,6 +1132,7 @@ const Core = (() => {
     state.editing = false;
     state.paint = 0;
     setScreen('result');
+    closePasteBox();
     computeView();
     runAnalysis(true);
     window.scrollTo(0, 0);
@@ -1164,6 +1187,7 @@ const Core = (() => {
   function setOpening(on) {
     opening = on;
     els.btnUpload.disabled = on;
+    els.btnPaste.disabled = on;
     els.btnUpload.textContent = on ? 'Opening photo…' : 'Upload photo';
   }
 
@@ -1704,17 +1728,120 @@ const Core = (() => {
     setTimeout(() => { els.btnCopy.textContent = 'Copy positions'; }, 1800);
   });
 
+  // ---------- Pasting ----------
+  const touchFirst = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac OS X/.test(navigator.userAgent);
+  const pasteKeys = isMac ? '⌘V' : 'Ctrl+V';
+  if (!touchFirst) els.keyHint.textContent = ' You can also press ' + pasteKeys + ' anywhere on the page, or drop an image onto it.';
+
+  function asFile(blob, type) {
+    const t = type || blob.type || 'image/png';
+    const ext = (t.split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '');
+    try { return new File([blob], 'pasted-image.' + ext, { type: t }); } catch (e) { blob.name = 'pasted-image.' + ext; return blob; }
+  }
+
+  function closePasteBox() {
+    els.pasteBox.hidden = true;
+    els.pasteTarget.innerHTML = '';
+  }
+
+  function openPasteBox() {
+    els.pasteHelp.textContent = touchFirst
+      ? 'Long-press in the box and choose Paste.'
+      : 'Click in the box and press ' + pasteKeys + '.';
+    els.pasteBox.hidden = false;
+    els.pasteTarget.innerHTML = '';
+    els.pasteTarget.focus();
+    els.pasteBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  async function srcToFile(src) {
+    if (!/^(data|blob):/i.test(src)) return null;
+    try { const blob = await (await fetch(src)).blob(); return blob.type.startsWith('image/') ? asFile(blob) : null; } catch (e) { return null; }
+  }
+
+  function noImageMessage() {
+    showToast("There's no image on the clipboard. Copy a screenshot or photo first, then paste it here.");
+  }
+
+  // Paste button: read the clipboard directly. On iPhone, Safari shows a small Paste
+  // bubble to confirm. If the browser won't allow it, fall back to a paste box.
+  async function pasteFromClipboard() {
+    if (opening) return;
+    if (!navigator.clipboard || !navigator.clipboard.read) { openPasteBox(); return; }
+    let items;
+    try {
+      items = await navigator.clipboard.read();
+    } catch (err) {
+      openPasteBox();
+      return;
+    }
+    for (const item of items) {
+      const type = item.types.find(t => t.startsWith('image/'));
+      if (type) {
+        try { const blob = await item.getType(type); closePasteBox(); loadFile(asFile(blob, type)); return; } catch (e) { /* try the next item */ }
+      }
+    }
+    // Some browsers only offer a copied web image as HTML with an embedded picture.
+    for (const item of items) {
+      if (!item.types.includes('text/html')) continue;
+      try {
+        const html = await (await item.getType('text/html')).text();
+        const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+        const f = m && await srcToFile(m[1]);
+        if (f) { closePasteBox(); loadFile(f); return; }
+      } catch (e) { /* ignore */ }
+    }
+    noImageMessage();
+  }
+
+  // Ctrl+V / ⌘V anywhere, and pasting into the paste box on phones.
   document.addEventListener('paste', e => {
-    const files = e.clipboardData ? Array.from(e.clipboardData.files) : [];
-    const f = files.find(x => x.type.startsWith('image/'));
-    if (f) loadFile(f);
+    const cd = e.clipboardData;
+    if (!cd) return;
+    let file = Array.from(cd.files || []).find(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name || ''));
+    if (!file) {
+      for (const it of Array.from(cd.items || [])) {
+        if (it.kind === 'file' && it.type.startsWith('image/')) { file = it.getAsFile(); if (file) break; }
+      }
+    }
+    const inBox = els.pasteTarget.contains(e.target) || e.target === els.pasteTarget;
+    if (file) {
+      e.preventDefault();
+      if (!els.camera.hidden) closeCamera();
+      closePasteBox();
+      loadFile(file);
+      return;
+    }
+    const html = cd.getData && cd.getData('text/html');
+    const m = html && html.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (m && /^(data|blob):/i.test(m[1])) {
+      e.preventDefault();
+      srcToFile(m[1]).then(f => { if (f) { closePasteBox(); loadFile(f); } else if (inBox) noImageMessage(); });
+      return;
+    }
+    if (!inBox) return;
+    // Let the browser insert what was pasted, then look for a picture in the box.
+    setTimeout(async () => {
+      const img = els.pasteTarget.querySelector('img');
+      const f = img && await srcToFile(img.src);
+      els.pasteTarget.innerHTML = '';
+      if (f) { closePasteBox(); loadFile(f); } else noImageMessage();
+    }, 60);
   });
+  els.pasteTarget.addEventListener('beforeinput', e => {
+    // Keep the box free of typed text; only pasting is meaningful here.
+    if (e.inputType && !/^insertFromPaste|^insertFromDrop/.test(e.inputType)) e.preventDefault();
+  });
+  els.btnPaste.addEventListener('click', pasteFromClipboard);
+  els.pasteCancel.addEventListener('click', closePasteBox);
+
   document.addEventListener('dragover', e => e.preventDefault());
   document.addEventListener('drop', e => {
     e.preventDefault();
     const files = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
-    const f = files.find(x => x.type.startsWith('image/'));
-    if (f) loadFile(f);
+    const f = files.find(x => x.type.startsWith('image/') || /\.(heic|heif)$/i.test(x.name || ''));
+    if (f) { closePasteBox(); loadFile(f); }
   });
   window.addEventListener('resize', requestDraw);
 

@@ -1,2 +1,2 @@
-# queenssolver
+# Queens Solver
 Queens Solver

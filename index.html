@@ -24,6 +24,7 @@
     --warn: #C98F00;
     --danger: #B8324B;
     --board-ink: #2A1E3B;
+    --dim: rgba(255, 255, 255, 0.62);
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -40,6 +41,7 @@
       --warn: #F6C431;
       --danger: #FF7D93;
       --board-ink: #1E1628;
+      --dim: rgba(35, 28, 46, 0.62);
       color-scheme: dark;
     }
   }
@@ -204,6 +206,29 @@
   }
   .swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--surface), 0 0 0 6px var(--gold); }
   .align { margin-top: 2.5rem; }
+  .guide-panel { margin-top: 1.25rem; padding: 1rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+  .guide-panel:focus { outline: none; }
+  .guide-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+  .g-count { color: var(--muted); font-size: 0.9375rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .g-text { min-height: 7.5em; margin: 0.9rem 0; line-height: 1.5; }
+  .g-nav { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.75rem; align-items: center; }
+  .g-nav .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; transform: none; }
+  .g-progress { color: var(--muted); font-size: 0.875rem; text-align: center; font-variant-numeric: tabular-nums; }
+  .g-legend { margin: 0.9rem 0 0; color: var(--muted); font-size: 0.8125rem; line-height: 1.9; }
+  .g-legend .lgi { white-space: nowrap; margin-right: 0.8rem; }
+  .g-legend .lgi span { display: inline-block; width: 0.95rem; height: 0.95rem; border-radius: 3px; vertical-align: -0.15em; margin-right: 0.3rem; border: 1px solid var(--line); }
+  .lg-x { background: linear-gradient(45deg, transparent 44%, #6b6380 44% 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, #6b6380 44% 56%, transparent 56%), #e9e4f2; }
+  .lg-new { background: linear-gradient(45deg, transparent 42%, #C0283F 42% 58%, transparent 58%), linear-gradient(-45deg, transparent 42%, #C0283F 42% 58%, transparent 58%), #e9e4f2; }
+  .lg-dim { background: linear-gradient(var(--dim), var(--dim)), #96BEFF; }
+  .gboard { box-shadow: none; }
+  .gboard .xm { width: 42%; height: 42%; fill: none; stroke: rgba(42, 30, 59, 0.5); stroke-width: 2.6; stroke-linecap: round; position: relative; z-index: 1; }
+  .gboard .x-new .xm { stroke: #C0283F; stroke-width: 3.2; animation: x-pop 260ms ease-out both; }
+  .gboard .crown { position: relative; z-index: 1; }
+  .gboard .q-new::before { content: ""; position: absolute; inset: 10%; border-radius: 50%; background: #F2B705; box-shadow: 0 0 0 2px #2A1E3B; animation: x-pop 300ms ease-out both; }
+  .gboard.has-focus .cell:not(.focus)::after { content: ""; position: absolute; inset: 0; background: var(--dim); z-index: 2; }
+  @keyframes x-pop { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+  .rg { white-space: nowrap; font-weight: 600; }
+  .sw { display: inline-block; width: 0.85em; height: 0.85em; border-radius: 3px; border: 1.5px solid #2A1E3B; vertical-align: -0.08em; margin-right: 0.3em; }
   .photo-wrap {
     display: flex; justify-content: center;
     background: var(--surface);
@@ -281,6 +306,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .board.animate .crown { animation: none; }
+    .gboard .x-new .xm, .gboard .q-new::before { animation: none; }
     .btn, .shutter { transition: none; }
   }
 </style>
@@ -327,6 +353,7 @@
     </div>
 
     <div class="actions">
+      <button id="btn-steps" class="btn btn-primary wide" type="button" aria-expanded="false" aria-controls="steps-panel">Show steps</button>
       <button id="btn-copy" class="btn" type="button">Copy positions</button>
       <button id="btn-fix" class="btn" type="button" aria-pressed="false">Fix colors</button>
     </div>
@@ -334,6 +361,21 @@
       <p>Pick the right color, then tap each cell that was read wrong. The answer updates as you go.</p>
       <div id="swatches" class="swatches" role="group" aria-label="Region colors"></div>
     </div>
+
+    <section id="steps-panel" class="guide-panel" hidden aria-labelledby="guide-h" tabindex="-1">
+      <div class="guide-head">
+        <h2 id="guide-h" class="h2">How to solve it</h2>
+        <span id="g-count" class="g-count"></span>
+      </div>
+      <div id="g-board" class="board gboard" aria-hidden="true"></div>
+      <p id="g-text" class="g-text" aria-live="polite"></p>
+      <div class="g-nav">
+        <button id="g-prev" class="btn" type="button">Back</button>
+        <span id="g-progress" class="g-progress"></span>
+        <button id="g-next" class="btn btn-primary" type="button">Next</button>
+      </div>
+      <p class="g-legend"><span class="lgi"><span class="lg-x" aria-hidden="true"></span>crossed out</span> <span class="lgi"><span class="lg-new" aria-hidden="true"></span>crossed out in this step</span> <span class="lgi"><span class="lg-dim" aria-hidden="true"></span>not involved</span></p>
+    </section>
 
     <section class="align" aria-labelledby="align-h">
       <h2 id="align-h" class="h2">Scan alignment</h2>
@@ -977,6 +1019,185 @@ const Core = (() => {
     return { solutions, aborted, nodes };
   }
 
+  // Step-by-step explanation in the order a person would reason, simplest rule first:
+  //   single   - a region, row or column has one open cell left: place the queen
+  //   confined - k regions/rows/columns have all their open cells inside k others,
+  //              so the rest of those others is crossed out (k = 1 is the classic case)
+  //   blocks   - a queen in this cell would leave some region/row/column with no open cell
+  //   trial    - a queen here leads, by the rules above, to a dead end
+  //   guess    - last resort: follow the known answer (only if nothing else applies)
+  // Each step records the board before it, so the guide can draw it.
+  function explain(N, regions, solution, budgetMs = 1500) {
+    const M = N * N;
+    let R = 0;
+    for (let i = 0; i < M; i++) if (regions[i] + 1 > R) R = regions[i] + 1;
+    const U = 2 * N + R;
+    const unitCells = Array.from({ length: U }, () => []), cellUnits = [], nbrs = [];
+    for (let i = 0; i < M; i++) {
+      const r = (i / N) | 0, c = i % N, us = [r, N + c, 2 * N + regions[i]];
+      cellUnits.push(us);
+      for (const u of us) unitCells[u].push(i);
+      const list = [];
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < N && cc >= 0 && cc < N) list.push(rr * N + cc);
+      }
+      nbrs.push(list);
+    }
+    const base = { row: 0, col: N, region: 2 * N }, count = { row: N, col: N, region: R };
+    const ref = u => (u < N ? { t: 'row', i: u } : u < 2 * N ? { t: 'col', i: u - N } : { t: 'region', i: u - 2 * N });
+    const unitOf = (i, t) => (t === 'row' ? (i / N) | 0 : t === 'col' ? N + (i % N) : 2 * N + regions[i]);
+    // Regions first: they're what people look at first in this puzzle.
+    const order = [];
+    for (let g = 0; g < R; g++) order.push(2 * N + g);
+    for (let k = 0; k < 2 * N; k++) order.push(k);
+    const t0 = Date.now();
+    const open = (u, c) => { const o = []; for (const i of unitCells[u]) if (c[i]) o.push(i); return o; };
+    const uniq = a => Array.from(new Set(a));
+
+    function place(i, c, d, q) {
+      const crossed = [];
+      c[i] = 0;
+      for (const u of cellUnits[i]) { d[u] = 1; for (const j of unitCells[u]) if (c[j]) { c[j] = 0; crossed.push(j); } }
+      for (const j of nbrs[i]) if (c[j]) { c[j] = 0; crossed.push(j); }
+      q.push(i);
+      return crossed;
+    }
+
+    function single(c, d) {
+      for (const u of order) {
+        if (d[u]) continue;
+        const o = open(u, c);
+        if (!o.length) return { contradiction: u };
+        if (o.length === 1) return { kind: 'place', why: 'single', cell: o[0], unit: ref(u), focus: unitCells[u].slice() };
+      }
+      return null;
+    }
+
+    const PAIRS = [['region', 'row'], ['region', 'col'], ['row', 'region'], ['col', 'region'], ['row', 'col'], ['col', 'row']];
+    function confined(c, d, kMin, kMax) {
+      for (let k = kMin; k <= kMax; k++) {
+        for (const [A, B] of PAIRS) {
+          if (k === 1 && A !== 'region' && B !== 'region') continue; // that's just a single
+          const act = [];
+          for (let j = 0; j < count[A]; j++) {
+            const u = base[A] + j;
+            if (d[u]) continue;
+            const o = open(u, c);
+            if (o.length) act.push({ u, b: new Set(o.map(i => unitOf(i, B))) });
+          }
+          if (act.length <= k) continue;
+          let found = null;
+          const pick = [];
+          const rec = (start, uni) => {
+            if (found) return;
+            if (pick.length === k) {
+              if (uni.size !== k) return;
+              const inS = new Set(pick.map(p => p.u));
+              const cells = [];
+              for (const bu of uni) for (const i of unitCells[bu]) if (c[i] && !inS.has(unitOf(i, A))) cells.push(i);
+              if (cells.length) {
+                const bIds = Array.from(uni).sort((x, y) => x - y);
+                found = {
+                  kind: 'cross', why: 'confined', k, cells,
+                  a: { t: A, ids: pick.map(p => p.u - base[A]).sort((x, y) => x - y) },
+                  b: { t: B, ids: bIds.map(x => x - base[B]) },
+                  focus: uniq([...pick.flatMap(p => unitCells[p.u]), ...bIds.flatMap(x => unitCells[x])])
+                };
+              }
+              return;
+            }
+            for (let j = start; j < act.length && !found; j++) {
+              const nu = new Set(uni);
+              for (const x of act[j].b) nu.add(x);
+              if (nu.size > k) continue;
+              pick.push(act[j]); rec(j + 1, nu); pick.pop();
+            }
+          };
+          rec(0, new Set());
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function blocks(c, d) {
+      const openList = [];
+      for (let u = 0; u < U; u++) openList.push(d[u] ? null : open(u, c));
+      const hits = new Map();
+      for (let x = 0; x < M; x++) {
+        if (!c[x]) continue;
+        const kill = new Set([x]);
+        for (const u of cellUnits[x]) for (const j of unitCells[u]) if (c[j]) kill.add(j);
+        for (const j of nbrs[x]) if (c[j]) kill.add(j);
+        for (const u of order) {
+          const o = openList[u];
+          if (!o || !o.length || cellUnits[x].includes(u)) continue;
+          if (o.every(j => kill.has(j))) { if (!hits.has(u)) hits.set(u, []); hits.get(u).push(x); }
+        }
+      }
+      if (!hits.size) return null;
+      let bu = -1, bn = Infinity;
+      for (const u of order) if (hits.has(u) && openList[u].length < bn) { bn = openList[u].length; bu = u; }
+      const cells = hits.get(bu);
+      return { kind: 'cross', why: 'blocks', unit: ref(bu), cells, focus: uniq([...unitCells[bu], ...cells]) };
+    }
+
+    function propagate(c, d, q) {
+      for (let guard = 0; guard < 300; guard++) {
+        if (q.length === N) return -1;
+        const s = single(c, d);
+        if (s && s.contradiction !== undefined) return s.contradiction;
+        if (s) { place(s.cell, c, d, q); continue; }
+        const e = confined(c, d, 1, 1) || blocks(c, d);
+        if (!e) return -1;
+        for (const j of e.cells) c[j] = 0;
+      }
+      return -1;
+    }
+
+    function trial(c, d, q) {
+      const cands = [];
+      for (let x = 0; x < M; x++) {
+        if (!c[x]) continue;
+        let m = Infinity;
+        for (const u of cellUnits[x]) if (!d[u]) m = Math.min(m, open(u, c).length);
+        cands.push([m, x]);
+      }
+      cands.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      for (const [, x] of cands) {
+        if (Date.now() - t0 > budgetMs) return null;
+        const c2 = c.slice(), d2 = d.slice(), q2 = q.slice();
+        place(x, c2, d2, q2);
+        const bad = propagate(c2, d2, q2);
+        if (bad >= 0) return { kind: 'cross', why: 'trial', cells: [x], unit: ref(bad), focus: uniq([x, ...unitCells[bad]]) };
+      }
+      return null;
+    }
+
+    const cand = new Uint8Array(M).fill(1), done = new Uint8Array(U), queens = [], steps = [];
+    const kMax = Math.max(2, Math.min(5, Math.floor(N / 2)));
+    let stuck = false;
+    while (queens.length < N && steps.length < 400) {
+      const before = { cand: cand.slice(), queens: queens.slice() };
+      const s = single(cand, done);
+      if (s && s.contradiction !== undefined) { stuck = true; break; }
+      if (s) { s.crossed = place(s.cell, cand, done, queens); s.before = before; steps.push(s); continue; }
+      const e = confined(cand, done, 1, 1) || blocks(cand, done) || confined(cand, done, 2, kMax) || trial(cand, done, queens);
+      if (e) { for (const j of e.cells) cand[j] = 0; e.before = before; steps.push(e); continue; }
+      if (!solution) { stuck = true; break; }
+      let bu = -1, bn = Infinity;
+      for (const u of order) if (!done[u]) { const n = open(u, cand).length; if (n < bn) { bn = n; bu = u; } }
+      const cell = bu < 0 ? undefined : unitCells[bu].find(i => cand[i] && solution[(i / N) | 0] === i % N);
+      if (cell === undefined) { stuck = true; break; }
+      const g = { kind: 'place', why: 'guess', cell, unit: ref(bu), focus: unitCells[bu].slice(), before };
+      g.crossed = place(cell, cand, done, queens);
+      steps.push(g);
+    }
+    return { steps, complete: !stuck && queens.length === N, queens };
+  }
+
   function analyze(img, corners, nOverride) {
     const H = homography(corners);
     let side = 0;
@@ -994,7 +1215,7 @@ const Core = (() => {
     return { N, autoN: grid.n, scores: grid.scores, rgbs, labs, regions, bordersReliable: borders.reliable };
   }
 
-  return { homography, project, warp, detectBoard, detectGridSize, sampleCells, rgb2lab, lab2rgb, gridEdges, measureBorders, clusterRegions, displayColors, solve, analyze };
+  return { explain, homography, project, warp, detectBoard, detectGridSize, sampleCells, rgb2lab, lab2rgb, gridEdges, measureBorders, clusterRegions, displayColors, solve, analyze };
 })();
 // ==CORE END==
 
@@ -1013,6 +1234,8 @@ const Core = (() => {
     btnNew: $('btn-new'), board: $('board'), status: $('status'),
     keyWrap: $('key-wrap'), key: $('key'), keySr: $('key-sr'),
     btnCopy: $('btn-copy'), btnFix: $('btn-fix'), palette: $('palette'), swatches: $('swatches'),
+    btnSteps: $('btn-steps'), stepsPanel: $('steps-panel'), gBoard: $('g-board'), gText: $('g-text'), gCount: $('g-count'),
+    gPrev: $('g-prev'), gNext: $('g-next'), gProgress: $('g-progress'),
     photo: $('photo'), photoWrap: $('photo-wrap'),
     nMinus: $('n-minus'), nPlus: $('n-plus'), nVal: $('n-val'), nAuto: $('n-auto'),
     btnReset: $('btn-reset'), btnFull: $('btn-full'), toast: $('toast')
@@ -1131,6 +1354,7 @@ const Core = (() => {
     state.fullView = false;
     state.editing = false;
     state.paint = 0;
+    setGuideOpen(false);
     setScreen('result');
     closePasteBox();
     computeView();
@@ -1377,6 +1601,7 @@ const Core = (() => {
     renderPalette();
     renderControls();
     drawPhoto();
+    refreshGuide();
   }
 
   function renderStatus() {
@@ -1449,6 +1674,205 @@ const Core = (() => {
     els.nAuto.setAttribute('aria-pressed', String(state.nManual == null));
     els.btnFull.textContent = state.fullView ? 'Zoom to board' : 'Show whole photo';
   }
+
+  // ---------- Step-by-step guide ----------
+  const guide = { open: false, steps: null, idx: 0, names: [], complete: false, multiple: false };
+  const XMARK = '<svg class="xm" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+
+  // Plain colour names for regions (approximate, so a swatch is always shown beside them).
+  function colorName(hex) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    let h = 0;
+    if (d) {
+      if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+      h *= 60; if (h < 0) h += 360;
+    }
+    if (d < 0.08 || s < 0.1) return 'grey';
+    if (h >= 20 && h < 65 && s < 0.35) return 'beige';
+    if (h < 15 || h >= 350) return 'red';
+    if (h < 40) return 'orange';
+    if (h < 70) return 'yellow';
+    if (h < 160) return 'green';
+    if (h < 200) return s > 0.6 && l < 0.7 ? 'cyan' : 'teal';
+    if (h < 255) return 'blue';
+    if (h < 285) return 'purple';
+    if (h < 320) return 'magenta';
+    return 'pink';
+  }
+  function regionNames(colors) {
+    const names = colors.map(colorName), out = names.slice();
+    const lum = hex => 0.299 * parseInt(hex.slice(1, 3), 16) + 0.587 * parseInt(hex.slice(3, 5), 16) + 0.114 * parseInt(hex.slice(5, 7), 16);
+    const groups = {};
+    names.forEach((n, g) => (groups[n] = groups[n] || []).push(g));
+    for (const n in groups) {
+      const ids = groups[n];
+      if (ids.length < 2) continue;
+      ids.sort((x, y) => lum(colors[y]) - lum(colors[x]));
+      ids.forEach((g, k) => {
+        out[g] = k === 0 ? 'light ' + n : k === ids.length - 1 ? 'dark ' + n : n + ' ' + (g + 1);
+      });
+    }
+    return out;
+  }
+
+  const nums = a => { a = a.map(x => x + 1); return a.length === 1 ? String(a[0]) : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; };
+  const cellText = i => 'row ' + (((i / state.N) | 0) + 1) + ', column ' + ((i % state.N) + 1);
+  const chip = g => '<span class="sw" style="background:' + state.colors[g] + '"></span>' + guide.names[g];
+  function regionsHTML(ids) {
+    const parts = ids.map(chip);
+    const joined = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+    return '<span class="rg">' + joined + (ids.length > 1 ? ' regions' : ' region') + '</span>';
+  }
+  function unitsHTML(t, ids) {
+    if (t === 'region') return 'the ' + regionsHTML(ids);
+    const word = t === 'row' ? 'row' : 'column';
+    return (ids.length > 1 ? word + 's ' : word + ' ') + nums(ids);
+  }
+  const cap = h => h.replace(/^([a-z])/, m => m.toUpperCase());
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+
+  function describe(st, first, last) {
+    const N = state.N;
+    if (st.kind === 'place') {
+      const r = ((st.cell / N) | 0) + 1, c = (st.cell % N) + 1;
+      const size = st.unit.t === 'region' ? state.regions.filter(g => g === st.unit.i).length : N;
+      let t;
+      if (st.why === 'single' && st.unit.t === 'region' && size === 1) t = cap(unitsHTML('region', [st.unit.i])) + ' is a single cell, at row ' + r + ', column ' + c + ', so its queen goes there.';
+      else if (st.why === 'single' && st.unit.t === 'region') t = 'Only one cell of ' + unitsHTML('region', [st.unit.i]) + ' is still open, at row ' + r + ', column ' + c + '. Its queen goes there.';
+      else if (st.why === 'single' && st.unit.t === 'row') t = 'Row ' + r + ' has only one open cell left, in column ' + c + '. Its queen goes there.';
+      else if (st.why === 'single') t = 'Column ' + c + ' has only one open cell left, in row ' + r + '. Its queen goes there.';
+      else t = (guide.multiple
+        ? 'These regions allow more than one answer, so this step follows the one shown. '
+        : 'No simple rule settles the next queen here; every other choice runs into a dead end further on. ') +
+        'The queen goes at row ' + r + ', column ' + c + '.';
+      if (last) return t;
+      return t + (first
+        ? ' Queens can\u2019t share a row, column or region, or touch, so that crosses out the rest of its row, column and region and the cells around it.'
+        : ' Its row, column, region and touching cells are now crossed out.');
+    }
+    const n = st.cells.length;
+    if (st.why === 'confined') {
+      const A = unitsHTML(st.a.t, st.a.ids), B = unitsHTML(st.b.t, st.b.ids);
+      if (st.k === 1 && st.a.t === 'region') {
+        return 'All open cells of ' + A + ' are in ' + B + ', so its queen must be in ' + B + '. Cross out the other ' + plural(n, 'cell') + ' in ' + B + '.';
+      }
+      if (st.k === 1) {
+        return 'All open cells in ' + A + ' belong to ' + B + ', so that region\u2019s queen is the one in ' + A + '. Cross out the rest of ' + B + ' (' + plural(n, 'cell') + ').';
+      }
+      return cap(A) + ' only have open cells in ' + B + '. Between them they need ' + st.k + ' queens, and ' + B + ' can hold exactly ' + st.k +
+        ', so no other cell in ' + B + ' can have a queen. Cross out those ' + plural(n, 'cell') + '.';
+    }
+    const U = st.unit.t === 'region' ? unitsHTML('region', [st.unit.i]) : unitsHTML(st.unit.t, [st.unit.i]);
+    if (st.why === 'blocks') {
+      return n === 1
+        ? 'A queen at ' + cellText(st.cells[0]) + ' would cross out every open cell of ' + U + ', leaving it nowhere for its queen. Cross that cell out.'
+        : 'A queen in any of the ' + n + ' marked cells would cross out every open cell of ' + U + ', leaving it nowhere for its queen. Cross them out.';
+    }
+    return 'Suppose a queen went at ' + cellText(st.cells[0]) + '. Following the rules from there, ' + U + ' soon runs out of open cells. So no queen can go there; cross it out.';
+  }
+
+  function buildGuide() {
+    guide.names = regionNames(state.colors);
+    guide.multiple = state.info && state.info.solutions.length > 1;
+    const res = Core.explain(state.N, state.regions, state.solution);
+    guide.steps = res.steps;
+    guide.complete = res.complete;
+    guide.idx = 0;
+  }
+
+  function renderGuideStep() {
+    const N = state.N, steps = guide.steps, st = steps[guide.idx];
+    const el = els.gBoard;
+    el.style.setProperty('--n', N);
+    if (!st) {
+      el.replaceChildren();
+      els.gText.textContent = "The steps couldn't be worked out for these regions. Check the colors with Fix colors.";
+      els.gCount.textContent = '';
+      els.gProgress.textContent = '';
+      els.gPrev.disabled = els.gNext.disabled = true;
+      return;
+    }
+    const queensBefore = new Set(st.before.queens);
+    const fresh = new Set(st.kind === 'place' ? st.crossed : st.cells);
+    const finished = guide.complete && guide.idx === steps.length - 1;
+    const focus = new Set(finished ? [] : (st.focus || []));
+    el.classList.toggle('has-focus', focus.size > 0);
+    const regions = state.regions, frag = document.createDocumentFragment();
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const i = r * N + c, g = regions[i];
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const side = (rr, cc) => (rr < 0 || cc < 0 || rr >= N || cc >= N) ? 'e' : regions[rr * N + cc] !== g ? 'k' : 'n';
+        cell.dataset.t = side(r - 1, c); cell.dataset.r = side(r, c + 1); cell.dataset.b = side(r + 1, c); cell.dataset.l = side(r, c - 1);
+        cell.style.background = state.colors[g];
+        if (queensBefore.has(i)) cell.innerHTML = CROWN_SVG;
+        else if (st.kind === 'place' && i === st.cell) { cell.innerHTML = CROWN_SVG; cell.classList.add('q-new'); }
+        else if (fresh.has(i)) { cell.innerHTML = XMARK; cell.classList.add(st.kind === 'place' ? 'x-auto' : 'x-new'); }
+        else if (!st.before.cand[i]) cell.innerHTML = XMARK;
+        if (!finished && (focus.has(i) || (st.kind === 'place' && i === st.cell) || fresh.has(i))) cell.classList.add('focus');
+        frag.appendChild(cell);
+      }
+    }
+    el.replaceChildren(frag);
+    const placed = st.before.queens.length + (st.kind === 'place' ? 1 : 0);
+    const last = guide.idx === steps.length - 1;
+    const first = st.kind === 'place' && st.before.queens.length === 0;
+    let text = describe(st, first, last && guide.complete);
+    if (last && guide.complete) text += ' <strong>All ' + N + ' queens are placed.</strong>';
+    els.gText.innerHTML = text;
+    els.gCount.textContent = 'Step ' + (guide.idx + 1) + ' of ' + steps.length;
+    els.gProgress.textContent = placed + ' of ' + N + ' queens';
+    els.gPrev.disabled = guide.idx === 0;
+    els.gNext.disabled = last;
+  }
+
+  function setGuideOpen(on) {
+    guide.open = on;
+    els.stepsPanel.hidden = !on;
+    els.btnSteps.setAttribute('aria-expanded', String(on));
+    els.btnSteps.textContent = on ? 'Hide steps' : 'Show steps';
+  }
+
+  function refreshGuide() {
+    els.btnSteps.hidden = !state.solution;
+    if (!state.solution) { setGuideOpen(false); return; }
+    if (guide.open) { buildGuide(); renderGuideStep(); }
+  }
+
+  function goStep(d) {
+    if (!guide.steps) return;
+    const k = clamp(guide.idx + d, 0, guide.steps.length - 1);
+    if (k === guide.idx) return;
+    guide.idx = k;
+    renderGuideStep();
+  }
+
+  els.btnSteps.addEventListener('click', () => {
+    if (guide.open) { setGuideOpen(false); return; }
+    buildGuide();
+    setGuideOpen(true);
+    renderGuideStep();
+    els.stepsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    els.gNext.focus({ preventScroll: true });
+  });
+  els.gPrev.addEventListener('click', () => goStep(-1));
+  els.gNext.addEventListener('click', () => goStep(1));
+  els.stepsPanel.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); goStep(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); goStep(-1); }
+  });
+  // Swipe left/right on the guide board to move between steps.
+  let swipeX = null;
+  els.gBoard.addEventListener('touchstart', e => { swipeX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+  els.gBoard.addEventListener('touchend', e => {
+    if (swipeX == null) return;
+    const dx = e.changedTouches[0].clientX - swipeX;
+    swipeX = null;
+    if (Math.abs(dx) > 45) goStep(dx < 0 ? 1 : -1);
+  });
 
   // ---------- Photo canvas with draggable corners ----------
   function computeView() {

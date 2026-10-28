@@ -1,0 +1,1736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Queens Solver</title>
+<meta name="description" content="Scan a Queens puzzle with your camera or a screenshot and see where every queen goes.">
+<meta name="theme-color" content="#E8EAF4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#18131F" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E8EAF4;
+    --surface: #FFFFFF;
+    --ink: #2A1E3B;
+    --muted: #5C5572;
+    --line: #CFD0E2;
+    --gold: #F2B705;
+    --edge: #2A1E3B;
+    --on-gold: #2A1E3B;
+    --ok: #2F9E5B;
+    --warn: #C98F00;
+    --danger: #B8324B;
+    --board-ink: #2A1E3B;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #18131F;
+      --surface: #231C2E;
+      --ink: #F1ECF8;
+      --muted: #ABA2C0;
+      --line: #3B3249;
+      --gold: #F6C431;
+      --edge: #B98A00;
+      --on-gold: #241A31;
+      --ok: #5BCB86;
+      --warn: #F6C431;
+      --danger: #FF7D93;
+      --board-ink: #1E1628;
+      color-scheme: dark;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  body.cam-open { overflow: hidden; }
+  main {
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 1.5rem) 1.25rem calc(env(safe-area-inset-bottom) + 2rem);
+  }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* ---------- Start screen ---------- */
+  .title {
+    font-size: clamp(2.9rem, 13vw, 4rem);
+    font-weight: 800;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    margin: 0.75rem 0 1rem;
+  }
+  .lede { font-size: 1.125rem; line-height: 1.45; color: var(--muted); margin: 0 0 2rem; max-width: 32ch; }
+  .demo { max-width: 16.5rem; margin: 0 0 2.25rem 0.35rem; transform: rotate(-3deg); }
+  .tips { color: var(--muted); font-size: 0.9375rem; margin: 1.25rem 0 0; max-width: 40ch; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    font: inherit;
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.2;
+    min-height: 3rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    border: 2px solid var(--ink);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 1.25rem; height: 1.25rem; flex: none; }
+  .btn-primary { background: var(--gold); color: var(--on-gold); border-color: var(--edge); box-shadow: 0 3px 0 var(--edge); }
+  .btn-primary:active { transform: translateY(3px); box-shadow: 0 0 0 var(--edge); }
+  .btn-ghost { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; padding-inline: 0.4rem; }
+  .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 340px) { .actions { grid-template-columns: 1fr; } }
+
+  /* ---------- Board ---------- */
+  .board {
+    --n: 5;
+    --bk: 1.5px;
+    --bn: 0.5px;
+    --thin-c: rgba(42, 30, 59, 0.3);
+    display: grid;
+    grid-template-columns: repeat(var(--n), 1fr);
+    grid-template-rows: repeat(var(--n), 1fr);
+    aspect-ratio: 1;
+    width: 100%;
+    border: 3px solid var(--board-ink);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--board-ink);
+    box-shadow: 0 22px 40px -26px rgba(42, 30, 59, 0.7);
+  }
+  .cell {
+    position: relative;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
+    border: 0 solid transparent;
+    font: inherit;
+    color: var(--board-ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button.cell { cursor: default; }
+  .cell[data-t="k"] { border-top: var(--bk) solid var(--board-ink); }
+  .cell[data-t="n"] { border-top: var(--bn) solid var(--thin-c); }
+  .cell[data-r="k"] { border-right: var(--bk) solid var(--board-ink); }
+  .cell[data-r="n"] { border-right: var(--bn) solid var(--thin-c); }
+  .cell[data-b="k"] { border-bottom: var(--bk) solid var(--board-ink); }
+  .cell[data-b="n"] { border-bottom: var(--bn) solid var(--thin-c); }
+  .cell[data-l="k"] { border-left: var(--bk) solid var(--board-ink); }
+  .cell[data-l="n"] { border-left: var(--bn) solid var(--thin-c); }
+  .crown { width: 62%; height: 62%; fill: #2A1E3B; display: block; }
+  .board.animate .crown { animation: crown-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.25) both; animation-delay: calc(var(--i, 0) * 70ms + 120ms); }
+  @keyframes crown-in {
+    from { transform: translateY(-35%) scale(0.3); opacity: 0; }
+    70% { transform: translateY(0) scale(1.12); opacity: 1; }
+    to { transform: none; opacity: 1; }
+  }
+  .board.editing button.cell { cursor: pointer; }
+  .board.editing button.cell:hover { filter: brightness(1.07); }
+  .board.editing .crown { opacity: 0.55; }
+
+  /* ---------- Result ---------- */
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1rem; }
+  .title-sm { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .status { display: flex; gap: 0.6rem; align-items: flex-start; margin: 1rem 0 1.75rem; }
+  .status::before { content: ""; flex: none; width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-top: 0.45rem; background: var(--muted); }
+  .status.ok::before { background: var(--ok); }
+  .status.warn::before { background: var(--warn); }
+  .status.error::before { background: var(--danger); }
+  .h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.2rem; }
+  .sub { color: var(--muted); font-size: 0.9375rem; margin: 0 0 0.85rem; }
+  .key-scroll { overflow-x: auto; margin: 0 0 1rem; }
+  .keys { display: grid; gap: 0.5rem; }
+  .key {
+    display: grid;
+    grid-template-columns: auto repeat(var(--n), minmax(1.2rem, 1fr));
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+    min-width: max-content;
+  }
+  .key span { text-align: center; padding: 0.35rem 0.05rem; font-variant-numeric: tabular-nums; }
+  .key .kh { text-align: left; padding-inline: 0.6rem 0.35rem; color: var(--muted); font-size: 0.875rem; align-self: stretch; display: flex; align-items: center; }
+  .key .kr { font-size: 0.875rem; color: var(--muted); border-top: 6px solid var(--c); }
+  .key .kc { font-size: var(--kf, 1.3rem); font-weight: 700; border-top: 1px solid var(--line); }
+  .key .kh2 { border-top: 1px solid var(--line); }
+  .palette { margin: 1rem 0 0; padding: 1rem; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+  .palette p { margin: 0 0 0.75rem; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .swatch {
+    width: 2.75rem; height: 2.75rem; border-radius: 10px;
+    border: 2px solid var(--board-ink); cursor: pointer;
+    font: inherit; font-weight: 700; color: #2A1E3B;
+  }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--surface), 0 0 0 6px var(--gold); }
+  .align { margin-top: 2.5rem; }
+  .photo-wrap {
+    display: flex; justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 0.5rem;
+  }
+  #photo { display: block; border-radius: 8px; touch-action: none; max-width: 100%; }
+  #photo:focus-visible { outline-offset: 2px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.85rem; }
+  .stepper { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .stepper .lbl { color: var(--muted); margin-right: 0.25rem; }
+  .stepper button {
+    width: 2.75rem; height: 2.75rem; border-radius: 12px;
+    border: 2px solid var(--ink); background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 1.4rem; font-weight: 600; line-height: 1; cursor: pointer;
+  }
+  .stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .stepper output { min-width: 4.4rem; text-align: center; font-weight: 700; font-size: 1.125rem; font-variant-numeric: tabular-nums; }
+  .chip {
+    font: inherit; font-weight: 600; font-size: 0.9375rem;
+    min-height: 2.75rem; padding: 0.4rem 0.95rem; border-radius: 999px;
+    border: 2px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--gold); border-color: var(--edge); color: var(--on-gold); }
+  .foot { color: var(--muted); font-size: 0.875rem; margin-top: 3rem; }
+
+  /* ---------- Camera ---------- */
+  .camera { position: fixed; inset: 0; z-index: 50; background: #000; color: #fff; }
+  .camera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .guide {
+    position: absolute; left: 50%; top: 46%;
+    width: min(86vw, 68vh, 36rem); aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 6px;
+    box-shadow: 0 0 0 100vmax rgba(12, 8, 18, 0.5);
+    pointer-events: none;
+  }
+  .guide i { position: absolute; width: 30px; height: 30px; border: 4px solid rgba(255, 255, 255, 0.92); transition: border-color 160ms ease; }
+  .camera.locked .guide i { border-color: #F6C431; }
+  .live { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .guide i:nth-child(1) { top: -4px; left: -4px; border-right: 0; border-bottom: 0; border-top-left-radius: 9px; }
+  .guide i:nth-child(2) { top: -4px; right: -4px; border-left: 0; border-bottom: 0; border-top-right-radius: 9px; }
+  .guide i:nth-child(3) { bottom: -4px; right: -4px; border-left: 0; border-top: 0; border-bottom-right-radius: 9px; }
+  .guide i:nth-child(4) { bottom: -4px; left: -4px; border-right: 0; border-top: 0; border-bottom-left-radius: 9px; }
+  .cam-hint {
+    position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 7.5rem);
+    margin: 0; padding: 0 1.5rem; text-align: center;
+    font-weight: 600; font-size: 1.0625rem; text-shadow: 0 1px 6px rgba(0,0,0,0.7);
+  }
+  .cam-close {
+    position: absolute; top: calc(env(safe-area-inset-top) + 0.75rem); left: 0.75rem;
+    font: inherit; font-weight: 600; color: #fff; background: rgba(0,0,0,0.45);
+    border: 0; border-radius: 999px; padding: 0.55rem 1rem; min-height: 2.75rem; cursor: pointer;
+  }
+  .shutter {
+    position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 1.75rem);
+    transform: translateX(-50%);
+    width: 78px; height: 78px; border-radius: 50%;
+    background: #fff; border: 6px solid rgba(255,255,255,0.35); background-clip: padding-box;
+    cursor: pointer;
+  }
+  .shutter:active { transform: translateX(-50%) scale(0.94); }
+  .shutter:focus-visible { outline-color: #F6C431; }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 1.25rem); z-index: 60;
+    transform: translateX(-50%);
+    width: min(92vw, 30rem);
+    background: var(--ink); color: var(--bg);
+    padding: 0.85rem 1.1rem; border-radius: 14px;
+    box-shadow: 0 12px 30px -12px rgba(0,0,0,0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .board.animate .crown { animation: none; }
+    .btn, .shutter { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section id="start">
+    <h1 class="title">Queens<br>Solver</h1>
+    <p class="lede">Scan a Queens puzzle on another screen, or upload a photo or screenshot, and see where every queen goes.</p>
+    <div id="demo" class="board demo animate" aria-hidden="true"></div>
+    <div class="actions">
+      <button id="btn-scan" class="btn btn-primary" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.4-2h5l1.4 2h1.6A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+        Scan board
+      </button>
+      <button id="btn-upload" class="btn" type="button">Upload photo</button>
+    </div>
+    <p class="tips">Upload photo accepts screenshots and camera pictures, including iPhone HEIC photos. Screenshots read most reliably; when photographing a screen, fill the frame with the board and tilt slightly to avoid glare.</p>
+  </section>
+
+  <section id="result" hidden>
+    <header class="bar">
+      <h1 class="title-sm">Queens Solver</h1>
+      <button id="btn-new" class="btn btn-ghost" type="button">New scan</button>
+    </header>
+
+    <div id="board" class="board" role="group" aria-label="Solution board"></div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <div id="key-wrap">
+      <h2 class="h2">Queen positions</h2>
+      <p class="sub">Rows count from the top, columns from the left.</p>
+      <div class="key-scroll"><div id="key" class="keys" aria-hidden="true"></div></div>
+      <ol id="key-sr" class="sr-only"></ol>
+    </div>
+
+    <div class="actions">
+      <button id="btn-copy" class="btn" type="button">Copy positions</button>
+      <button id="btn-fix" class="btn" type="button" aria-pressed="false">Fix colors</button>
+    </div>
+    <div id="palette" class="palette" hidden>
+      <p>Pick the right color, then tap each cell that was read wrong. The answer updates as you go.</p>
+      <div id="swatches" class="swatches" role="group" aria-label="Region colors"></div>
+    </div>
+
+    <section class="align" aria-labelledby="align-h">
+      <h2 id="align-h" class="h2">Scan alignment</h2>
+      <p class="sub">Drag the gold corners onto the board's outer corners. The white grid should sit on the board's lines.</p>
+      <div id="photo-wrap" class="photo-wrap"><canvas id="photo" tabindex="0" aria-label="Photo with adjustable board corners. Press Enter to switch corner and arrow keys to move it; hold Shift to move faster."></canvas></div>
+      <div class="controls">
+        <div class="stepper" role="group" aria-label="Grid size">
+          <span class="lbl">Grid size</span>
+          <button id="n-minus" type="button" aria-label="Smaller grid">&minus;</button>
+          <output id="n-val" aria-live="polite">9 × 9</output>
+          <button id="n-plus" type="button" aria-label="Larger grid">+</button>
+        </div>
+        <button id="n-auto" class="chip" type="button" aria-pressed="true">Auto-detect size</button>
+      </div>
+      <div class="controls">
+        <button id="btn-reset" class="btn btn-ghost" type="button">Reset corners</button>
+        <button id="btn-full" class="btn btn-ghost" type="button">Show whole photo</button>
+      </div>
+    </section>
+  </section>
+
+  <p class="foot">Everything runs in your browser. Photos never leave your device.</p>
+</main>
+
+<div id="camera" class="camera" hidden role="dialog" aria-modal="true" aria-label="Scan board">
+  <video id="video" playsinline muted autoplay></video>
+  <div id="guide" class="guide"><i></i><i></i><i></i><i></i></div>
+  <canvas id="live" class="live" aria-hidden="true"></canvas>
+  <p id="cam-hint" class="cam-hint" aria-live="polite">Fit the board inside the square</p>
+  <button id="btn-cam-close" class="cam-close" type="button">Close</button>
+  <button id="btn-shutter" class="shutter" type="button" aria-label="Capture board"></button>
+</div>
+<input id="file" type="file" accept="image/*" hidden>
+<div id="toast" class="toast" role="alert" hidden></div>
+
+<script>
+// ==CORE START==
+// Pure image-processing and solver code. No DOM access, so it can be tested in Node.
+const Core = (() => {
+  'use strict';
+
+  // Homography mapping the unit square (u,v) to a quad [TL, TR, BR, BL].
+  function homography(q) {
+    const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+    const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+    const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+    let g = 0, h = 0;
+    const den = dx1 * dy2 - dx2 * dy1;
+    if (Math.abs(den) > 1e-9 && (Math.abs(dx3) > 1e-9 || Math.abs(dy3) > 1e-9)) {
+      g = (dx3 * dy2 - dx2 * dy3) / den;
+      h = (dx1 * dy3 - dx3 * dy1) / den;
+    }
+    return { a: x1 - x0 + g * x1, b: x3 - x0 + h * x3, c: x0, d: y1 - y0 + g * y1, e: y3 - y0 + h * y3, f: y0, g, h };
+  }
+
+  function project(H, u, v) {
+    const den = H.g * u + H.h * v + 1;
+    return [(H.a * u + H.b * v + H.c) / den, (H.d * u + H.e * v + H.f) / den];
+  }
+
+  // Perspective-correct the board into an S x S RGB image, with ss x ss supersampling.
+  function warp(img, H, S, ss) {
+    const { w, h, data } = img;
+    const out = new Uint8ClampedArray(S * S * 3);
+    const inv = 1 / (ss * ss), maxX = w - 1.001, maxY = h - 1.001;
+    let o = 0;
+    for (let j = 0; j < S; j++) {
+      for (let i = 0; i < S; i++) {
+        let r = 0, g = 0, b = 0;
+        for (let sy = 0; sy < ss; sy++) {
+          const v = (j + (sy + 0.5) / ss) / S;
+          for (let sx = 0; sx < ss; sx++) {
+            const u = (i + (sx + 0.5) / ss) / S;
+            const den = H.g * u + H.h * v + 1;
+            let x = (H.a * u + H.b * v + H.c) / den - 0.5;
+            let y = (H.d * u + H.e * v + H.f) / den - 0.5;
+            if (x < 0) x = 0; else if (x > maxX) x = maxX;
+            if (y < 0) y = 0; else if (y > maxY) y = maxY;
+            const xi = x | 0, yi = y | 0, fx = x - xi, fy = y - yi;
+            const p = (yi * w + xi) * 4, q = p + w * 4;
+            const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+            r += data[p] * w00 + data[p + 4] * w10 + data[q] * w01 + data[q + 4] * w11;
+            g += data[p + 1] * w00 + data[p + 5] * w10 + data[q + 1] * w01 + data[q + 5] * w11;
+            b += data[p + 2] * w00 + data[p + 6] * w10 + data[q + 2] * w01 + data[q + 6] * w11;
+          }
+        }
+        out[o++] = r * inv; out[o++] = g * inv; out[o++] = b * inv;
+      }
+    }
+    return { w: S, h: S, data: out };
+  }
+
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function dilate(m, w, h) {
+    const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = m[row + x] || (x > 0 && m[row + x - 1]) || (x < w - 1 && m[row + x + 1]) ? 1 : 0;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        out[row + x] = tmp[row + x] || (y > 0 && tmp[row - w + x]) || (y < h - 1 && tmp[row + w + x]) ? 1 : 0;
+      }
+    }
+    return out;
+  }
+
+  // Robust line fit y = m*x + b (RANSAC, then least squares on inliers).
+  function fitLine(xs, ys, tol, rng) {
+    const n = xs.length;
+    if (n < 8) return null;
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < n; k++) { if (xs[k] < lo) lo = xs[k]; if (xs[k] > hi) hi = xs[k]; }
+    const minSpread = (hi - lo) * 0.25;
+    let best = null, bestCnt = 0;
+    for (let it = 0; it < 300; it++) {
+      const i = (rng() * n) | 0, j = (rng() * n) | 0;
+      const dx = xs[j] - xs[i];
+      if (Math.abs(dx) < minSpread) continue;
+      const m = (ys[j] - ys[i]) / dx;
+      if (Math.abs(m) > 0.8) continue;
+      const b = ys[i] - m * xs[i];
+      let cnt = 0;
+      for (let k = 0; k < n; k++) if (Math.abs(ys[k] - m * xs[k] - b) <= tol) cnt++;
+      if (cnt > bestCnt) { bestCnt = cnt; best = { m, b }; }
+    }
+    if (!best) return null;
+    for (let pass = 0; pass < 3; pass++) {
+      let sx = 0, sy = 0, sxx = 0, sxy = 0, c = 0;
+      for (let k = 0; k < n; k++) {
+        if (Math.abs(ys[k] - best.m * xs[k] - best.b) <= tol) {
+          sx += xs[k]; sy += ys[k]; sxx += xs[k] * xs[k]; sxy += xs[k] * ys[k]; c++;
+        }
+      }
+      const d = c * sxx - sx * sx;
+      if (c < 2 || Math.abs(d) < 1e-9) break;
+      const m = (c * sxy - sx * sy) / d;
+      best = { m, b: (sy - m * sx) / c };
+    }
+    best.support = bestCnt / n;
+    return best;
+  }
+
+  function polyArea(q) {
+    let a = 0;
+    for (let i = 0; i < 4; i++) { const p = q[i], r = q[(i + 1) % 4]; a += p[0] * r[1] - r[0] * p[1]; }
+    return a / 2;
+  }
+
+  // Find the board's four corners in a small RGBA image, searching inside roi.
+  // The board is the largest connected patch of colorful pixels; its edges are fitted as lines
+  // so that a grey region sitting in a corner does not cut that corner off.
+  function detectBoardPass(img, roi, opts, mode) {
+    const useEdge = mode === 'colorEdge', frame = mode === 'frame';
+    const { w, h, data } = img;
+    const X0 = Math.max(0, Math.floor(roi.x)), Y0 = Math.max(0, Math.floor(roi.y));
+    const X1 = Math.min(w, Math.ceil(roi.x + roi.w)), Y1 = Math.min(h, Math.ceil(roi.y + roi.h));
+    const rw = X1 - X0, rh = Y1 - Y0;
+    if (rw < 40 || rh < 40) return null;
+    const px = (x, y) => ((y + Y0) * w + (x + X0)) * 4;
+
+    // White balance from the brightest pixels (usually the app's white UI), so a camera's
+    // colour cast doesn't make the whole screen look colourful.
+    const lum = [];
+    for (let y = 0; y < rh; y += 2) for (let x = 0; x < rw; x += 2) {
+      const p = px(x, y);
+      lum.push(0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]);
+    }
+    const lumSorted = lum.slice().sort((a, b) => a - b);
+    const lumCut = lumSorted[Math.floor(lumSorted.length * 0.93)];
+    const br = [], bg = [], bb = [];
+    for (let y = 0; y < rh; y += 2) for (let x = 0; x < rw; x += 2) {
+      const p = px(x, y);
+      if (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2] >= lumCut) { br.push(data[p]); bg.push(data[p + 1]); bb.push(data[p + 2]); }
+    }
+    const ref = [median(br), median(bg), median(bb)];
+    const refMx = Math.max(...ref), refMn = Math.min(...ref);
+    let kr = 1, kg = 1, kb = 1;
+    if (refMx > 60 && (refMx - refMn) / refMx < 0.2) {
+      const t = (ref[0] + ref[1] + ref[2]) / 3;
+      kr = t / Math.max(ref[0], 1); kg = t / Math.max(ref[1], 1); kb = t / Math.max(ref[2], 1);
+    }
+    // The colour around the edge of the search area is background (screen, bezel or desk).
+    const er = [], eg = [], eb = [];
+    const ring = Math.max(2, Math.round(Math.min(rw, rh) * 0.03));
+    for (let y = 0; y < rh; y += 2) for (let x = 0; x < rw; x += 2) {
+      if (x >= ring && x < rw - ring && y >= ring && y < rh - ring) continue;
+      const p = px(x, y);
+      er.push(data[p]); eg.push(data[p + 1]); eb.push(data[p + 2]);
+    }
+    const edge = [median(er), median(eg), median(eb)];
+
+    let m = new Uint8Array(rw * rh);
+    // Line mode: the board's grid lines, region borders and outline form one connected
+    // shape, which traces the true outline even when a grey region runs along an edge.
+    // A pixel is line ink if it is clearly darker than the brightest pixel near it, so large
+    // dark areas (bezel, desk, dark-mode background) and lighting gradients are ignored.
+    let Lr = null, Lmax = null;
+    if (frame) {
+      Lr = new Float32Array(rw * rh);
+      for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+        const p = px(x, y);
+        Lr[y * rw + x] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+      }
+      const rad = 3, tmp = new Float32Array(rw * rh);
+      Lmax = new Float32Array(rw * rh);
+      for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+        let mx = 0;
+        for (let k = Math.max(0, x - rad); k <= Math.min(rw - 1, x + rad); k++) if (Lr[y * rw + k] > mx) mx = Lr[y * rw + k];
+        tmp[y * rw + x] = mx;
+      }
+      for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+        let mx = 0;
+        for (let k = Math.max(0, y - rad); k <= Math.min(rh - 1, y + rad); k++) if (tmp[k * rw + x] > mx) mx = tmp[k * rw + x];
+        Lmax[y * rw + x] = mx;
+      }
+    }
+    for (let y = 0; y < rh; y++) {
+      for (let x = 0; x < rw; x++) {
+        const p = px(x, y);
+        const r0 = data[p], g0 = data[p + 1], b0 = data[p + 2];
+        if (frame) {
+          const i = y * rw + x, hi = Lmax[i];
+          if (hi > 90 && hi - Lr[i] > Math.max(28, 0.22 * hi)) m[i] = 1;
+          continue;
+        }
+        const r = r0 * kr, g = g0 * kg, b = b0 * kb;
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        if (mx < 60 || mx - mn < 18 || (mx - mn) / mx < 0.12) continue;
+        const de = Math.abs(r0 - edge[0]) + Math.abs(g0 - edge[1]) + Math.abs(b0 - edge[2]);
+        if (useEdge && de < 45) continue;
+        m[y * rw + x] = 1;
+      }
+    }
+    const R = frame ? 1 : 2;
+    for (let k = 0; k < R; k++) m = dilate(m, rw, rh);
+
+    // Pick the most board-like blob: large, square, and not running off the edge of the frame.
+    const lab = new Int32Array(rw * rh), stack = new Int32Array(rw * rh);
+    let bestLab = 0, bestArea = 0, bestScore = 0, bestTouches = 0, next = 1;
+    for (let s = 0; s < rw * rh; s++) {
+      if (!m[s] || lab[s]) continue;
+      let sp = 0, area = 0, minX = rw, maxX = 0, minY = rh, maxY = 0;
+      stack[sp++] = s; lab[s] = next;
+      while (sp) {
+        const t = stack[--sp]; area++;
+        const x = t % rw, y = (t / rw) | 0;
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x > 0 && m[t - 1] && !lab[t - 1]) { lab[t - 1] = next; stack[sp++] = t - 1; }
+        if (x < rw - 1 && m[t + 1] && !lab[t + 1]) { lab[t + 1] = next; stack[sp++] = t + 1; }
+        if (t >= rw && m[t - rw] && !lab[t - rw]) { lab[t - rw] = next; stack[sp++] = t - rw; }
+        if (t < rw * (rh - 1) && m[t + rw] && !lab[t + rw]) { lab[t + rw] = next; stack[sp++] = t + rw; }
+      }
+      if (area > rw * rh * (frame ? 0.004 : 0.02)) {
+        const bw = maxX - minX + 1, bh = maxY - minY + 1;
+        const aspect = Math.min(bw, bh) / Math.max(bw, bh);
+        const fill = frame ? 0.6 : area / (bw * bh);
+        const touches = (minX <= 1) + (minY <= 1) + (maxX >= rw - 2) + (maxY >= rh - 2);
+        const score = area * aspect * aspect * Math.min(1, fill / 0.6) * Math.pow(0.3, touches);
+        if (score > bestScore) { bestScore = score; bestArea = area; bestLab = next; bestTouches = touches; }
+      }
+      next++;
+    }
+    if (!bestLab) return null;
+    // Inside a camera guide, a blob running off two edges is a board that didn't fit the square.
+    if (opts && opts.rejectCut && bestTouches >= 2) return null;
+
+    const top = new Int32Array(rw).fill(-1), bot = new Int32Array(rw).fill(-1);
+    const left = new Int32Array(rh).fill(-1), right = new Int32Array(rh).fill(-1);
+    for (let y = 0; y < rh; y++) {
+      for (let x = 0; x < rw; x++) {
+        if (lab[y * rw + x] !== bestLab) continue;
+        if (top[x] < 0) top[x] = y;
+        bot[x] = y;
+        if (left[y] < 0) left[y] = x;
+        right[y] = x;
+      }
+    }
+    const tx = [], ty = [], by = [], ly = [], lx = [], rx = [];
+    for (let x = 0; x < rw; x++) if (top[x] >= 0) { tx.push(x + 0.5); ty.push(top[x] + R); by.push(bot[x] + 1 - R); }
+    for (let y = 0; y < rh; y++) if (left[y] >= 0) { ly.push(y + 0.5); lx.push(left[y] + R); rx.push(right[y] + 1 - R); }
+    const tol = Math.max(1.5, Math.sqrt(bestArea) * 0.012);
+    const rng = mulberry32(1234567);
+    const T = fitLine(tx, ty, tol, rng), B = fitLine(tx, by, tol, rng);
+    const L = fitLine(ly, lx, tol, rng), Rt = fitLine(ly, rx, tol, rng);
+    if (!T || !B || !L || !Rt) return null;
+    if (Math.min(T.support, B.support, L.support, Rt.support) < 0.3) return null;
+    const cross = (hl, vl) => {
+      const x = (vl.m * hl.b + vl.b) / (1 - hl.m * vl.m);
+      return [x + X0, hl.m * x + hl.b + Y0];
+    };
+    const q = [cross(T, L), cross(T, Rt), cross(B, Rt), cross(B, L)];
+    if (q.some(p => !isFinite(p[0]) || !isFinite(p[1]))) return null;
+    const area = polyArea(q);
+    if (area < rw * rh * 0.03) return null;
+    for (let i = 0; i < 4; i++) {
+      const a = q[i], b = q[(i + 1) % 4], c = q[(i + 2) % 4];
+      if ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) <= 0) return null;
+    }
+    const sides = [0, 1, 2, 3].map(i => Math.hypot(q[(i + 1) % 4][0] - q[i][0], q[(i + 1) % 4][1] - q[i][1]));
+    if (Math.max(...sides) / Math.min(...sides) > 1.8) return null;
+    const padX = rw * 0.1, padY = rh * 0.1;
+    if (q.some(([x, y]) => x < X0 - padX || x > X1 + padX || y < Y0 - padY || y > Y1 + padY)) return null;
+    return q;
+  }
+
+  // How strongly a quad looks like a grid once straightened (scale-free).
+  function gridness(img, q) {
+    const wp = warp(img, homography(q), 240, 1);
+    return detectGridSize(wp, 5, 13).strength;
+  }
+
+  // Three ways to find the board: colourful cells with the frame's edge colour treated as
+  // background, colourful cells without that rule (for tight crops), and the dark outline.
+  // Keep whichever quad looks most like a grid once straightened.
+  function detectBoard(img, roi, opts, sharp) {
+    const cands = [detectBoardPass(img, roi, opts, 'colorEdge'), detectBoardPass(img, roi, opts, 'color')];
+    if (sharp && sharp.w > img.w) {
+      const k = sharp.w / img.w;
+      const q = detectBoardPass(sharp, { x: roi.x * k, y: roi.y * k, w: roi.w * k, h: roi.h * k }, opts, 'frame');
+      cands.push(q && q.map(([x, y]) => [x / k, y / k]));
+    } else {
+      cands.push(detectBoardPass(img, roi, opts, 'frame'));
+    }
+    return pickBest(img, cands.filter(Boolean));
+  }
+
+  // The returned quad carries .strength: roughly 1 for a clear board, near 0 for clutter.
+  function pickBest(img, cands) {
+    if (!cands.length) return null;
+    let best = cands[0], bestG = gridness(img, cands[0]);
+    for (let k = 1; k < cands.length; k++) {
+      const g = gridness(img, cands[k]);
+      if (g > bestG * 1.05) { best = cands[k]; bestG = g; }
+    }
+    best.strength = bestG;
+    return best;
+  }
+
+  function scoreGrid(p, n, S) {
+    const cell = S / n, win = Math.max(2, Math.round(cell * 0.1));
+    const at = pos => {
+      const c = Math.round(pos);
+      let mx = 0;
+      for (let k = c - win; k <= c + win; k++) if (k >= 0 && k < S && p[k] > mx) mx = p[k];
+      return mx;
+    };
+    let lines = 0, mids = 0;
+    for (let k = 1; k < n; k++) lines += at(k * cell);
+    for (let k = 0; k < n; k++) mids += at((k + 0.5) * cell);
+    return lines / (n - 1) - mids / n;
+  }
+
+  // Estimate the number of rows/columns from where edges line up in the warped board.
+  // Comparing "on the lines" with "between the lines" rules out half and double sizes.
+  function detectGridSize(wp, minN, maxN) {
+    const S = wp.w, d = wp.data;
+    const L = new Float32Array(S * S);
+    for (let i = 0; i < S * S; i++) L[i] = 0.299 * d[3 * i] + 0.587 * d[3 * i + 1] + 0.114 * d[3 * i + 2];
+    const px = new Float64Array(S), py = new Float64Array(S), g = new Float32Array(S);
+    const m0 = Math.round(S * 0.03), m1 = S - m0, cap = 50;
+    for (let y = m0; y < m1; y++) {
+      const row = y * S;
+      for (let x = 1; x < S - 1; x++) g[x] = Math.min(cap, Math.abs(L[row + x + 1] - L[row + x - 1]));
+      for (let x = 3; x < S - 3; x++) px[x] += Math.max(g[x - 2], g[x - 1], g[x], g[x + 1], g[x + 2]);
+    }
+    for (let x = m0; x < m1; x++) {
+      for (let y = 1; y < S - 1; y++) g[y] = Math.min(cap, Math.abs(L[(y + 1) * S + x] - L[(y - 1) * S + x]));
+      for (let y = 3; y < S - 3; y++) py[y] += Math.max(g[y - 2], g[y - 1], g[y], g[y + 1], g[y + 2]);
+    }
+    let best = minN, bestScore = -Infinity;
+    const scores = {};
+    for (let n = minN; n <= maxN; n++) {
+      const s = scoreGrid(px, n, S) + scoreGrid(py, n, S);
+      scores[n] = s;
+      if (s > bestScore) { bestScore = s; best = n; }
+    }
+    let mean = 0;
+    for (let k = 0; k < S; k++) mean += px[k] + py[k];
+    mean /= S;
+    return { n: best, scores, strength: bestScore / (mean + 1e-6) };
+  }
+
+  function median(a) {
+    const s = a.slice().sort((x, y) => x - y);
+    return s.length ? s[s.length >> 1] : 0;
+  }
+
+  // Sample each cell near its four inner corners: clear of the grid lines and of any
+  // queen or X mark drawn in the middle of the cell.
+  function sampleCells(wp, N) {
+    const S = wp.w, d = wp.data, cell = S / N;
+    const offs = [0.24, 0.76], rad = Math.max(1, Math.round(cell * 0.07));
+    const out = [];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const R = [], G = [], B = [];
+        for (const oy of offs) {
+          for (const ox of offs) {
+            const cx = Math.round((c + ox) * cell), cy = Math.round((r + oy) * cell);
+            for (let dy = -rad; dy <= rad; dy++) {
+              for (let dx = -rad; dx <= rad; dx++) {
+                const x = Math.min(S - 1, Math.max(0, cx + dx)), y = Math.min(S - 1, Math.max(0, cy + dy));
+                const p = (y * S + x) * 3;
+                R.push(d[p]); G.push(d[p + 1]); B.push(d[p + 2]);
+              }
+            }
+          }
+        }
+        // Drop dark pixels from queen/X icons before taking the median colour.
+        const lum = R.map((v, k) => 0.299 * v + 0.587 * G[k] + 0.114 * B[k]);
+        const mid = median(lum);
+        const cut = 0.6 * median(lum.filter(v => v >= mid));
+        const keep = lum.map(v => v >= cut);
+        const f = arr => { const k = arr.filter((_, q) => keep[q]); return k.length ? k : arr; };
+        out.push([median(f(R)), median(f(G)), median(f(B))]);
+      }
+    }
+    return out;
+  }
+
+  const toLin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  function rgb2lab([r, g, b]) {
+    const R = toLin(r), G = toLin(g), B = toLin(b);
+    const X = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047;
+    const Y = R * 0.2126 + G * 0.7152 + B * 0.0722;
+    const Z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+    const f = t => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+    const fx = f(X), fy = f(Y), fz = f(Z);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  }
+  function lab2rgb([L, a, b]) {
+    const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+    const inv = t => (t * t * t > 0.008856 ? t * t * t : (t - 16 / 116) / 7.787);
+    const X = inv(fx) * 0.95047, Y = inv(fy), Z = inv(fz) * 1.08883;
+    const R = X * 3.2406 - Y * 1.5372 - Z * 0.4986;
+    const G = -X * 0.9689 + Y * 1.8758 + Z * 0.0415;
+    const B = X * 0.0557 - Y * 0.2040 + Z * 1.0570;
+    const enc = c => {
+      c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055;
+      return Math.round(Math.min(1, Math.max(0, c)) * 255);
+    };
+    return [enc(R), enc(G), enc(B)];
+  }
+
+  // Pairs of neighbouring cells: [right neighbour, lower neighbour] for each cell.
+  function gridEdges(N) {
+    const edges = [];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const i = r * N + c;
+        if (c + 1 < N) edges.push(i, i + 1);
+        if (r + 1 < N) edges.push(i, i + N);
+      }
+    }
+    return edges;
+  }
+
+  // How much line ink sits on each cell boundary. Region borders are drawn thicker than the
+  // lines inside a region; the area of the brightness dip survives blur, and works in log
+  // scale so glare (which lowers contrast) doesn't hide a thick border.
+  // Returns, per edge, the probability that it is a region border (0.5 everywhere if unclear).
+  function measureBorders(wp, N, edges) {
+    const S = wp.w, d = wp.data, cell = S / N;
+    const L = new Float32Array(S * S);
+    for (let i = 0; i < S * S; i++) L[i] = 0.299 * d[3 * i] + 0.587 * d[3 * i + 1] + 0.114 * d[3 * i + 2];
+    const half = Math.max(3, Math.round(cell * 0.25)), endW = Math.max(2, Math.round(half * 0.35));
+    const prof = new Float32Array(2 * half + 1);
+    const E = edges.length / 2, dips = new Float64Array(E);
+    for (let e = 0; e < E; e++) {
+      const i = edges[2 * e], j = edges[2 * e + 1];
+      const r = (i / N) | 0, c = i % N, vertical = j === i + 1;
+      const b = Math.round((vertical ? c + 1 : r + 1) * cell);
+      const a0 = Math.round(((vertical ? r : c) + 0.2) * cell), a1 = Math.round(((vertical ? r : c) + 0.8) * cell);
+      const vals = [];
+      for (let t = a0; t <= a1; t += 2) {
+        for (let k = -half; k <= half; k++) {
+          const q = Math.min(S - 1, Math.max(0, b + k));
+          const tt = Math.min(S - 1, Math.max(0, t));
+          prof[k + half] = vertical ? L[tt * S + q] : L[q * S + tt];
+        }
+        const lo = [], hi = [];
+        for (let k = 0; k < endW; k++) { lo.push(prof[k]); hi.push(prof[2 * half - k]); }
+        const b0 = median(lo), b1 = median(hi);
+        let dip = 0;
+        for (let k = 0; k <= 2 * half; k++) dip += Math.abs(b0 + ((b1 - b0) * k) / (2 * half) - prof[k]);
+        vals.push(dip);
+      }
+      dips[e] = Math.log(1 + median(vals));
+    }
+    // Two-class split (Otsu) of the log dips into "thin line" and "region border".
+    const sorted = Array.from(dips).sort((x, y) => x - y);
+    let bestT = 0, bestVar = -1, mLo = 0, mHi = 0, fracHi = 0;
+    const tot = sorted.reduce((s, v) => s + v, 0);
+    let cum = 0;
+    for (let k = 1; k < sorted.length; k++) {
+      cum += sorted[k - 1];
+      const w0 = k / sorted.length, w1 = 1 - w0;
+      const u0 = cum / k, u1 = (tot - cum) / (sorted.length - k);
+      const v = w0 * w1 * (u0 - u1) * (u0 - u1);
+      if (v > bestVar) { bestVar = v; bestT = (sorted[k - 1] + sorted[k]) / 2; mLo = u0; mHi = u1; fracHi = w1; }
+    }
+    const p = new Float64Array(E);
+    const reliable = mHi - mLo > Math.log(2.2) && fracHi > 0.06 && fracHi < 0.75;
+    const spread = Math.max(1e-3, (mHi - mLo) / 6);
+    for (let e = 0; e < E; e++) p[e] = reliable ? 1 / (1 + Math.exp(-(dips[e] - bestT) / spread)) : 0.5;
+    return { p, reliable };
+  }
+
+  // Group cells into K contiguous regions. Only neighbouring groups may merge, which copes
+  // with uneven lighting across a photo. Colour difference is scaled up across thick borders
+  // and down across thin lines, and a mild size weighting lets stray glare cells be absorbed
+  // before two large, genuinely different regions are joined.
+  function clusterRegions(labs, N, K, edgeP) {
+    const M = N * N, WL = 0.55;
+    const cid = new Int32Array(M);
+    const sL = new Float64Array(M), sA = new Float64Array(M), sB = new Float64Array(M), cnt = new Float64Array(M);
+    for (let i = 0; i < M; i++) {
+      cid[i] = i; sL[i] = labs[i][0] * WL; sA[i] = labs[i][1]; sB[i] = labs[i][2]; cnt[i] = 1;
+    }
+    const edges = gridEdges(N);
+    const E = edges.length / 2;
+    let alive = M;
+    const pSum = new Map(), pCnt = new Map();
+    while (alive > K) {
+      pSum.clear(); pCnt.clear();
+      for (let e = 0; e < E; e++) {
+        let a = cid[edges[2 * e]], b = cid[edges[2 * e + 1]];
+        if (a === b) continue;
+        if (a > b) { const t = a; a = b; b = t; }
+        const key = a * M + b;
+        pSum.set(key, (pSum.get(key) || 0) + (edgeP ? edgeP[e] : 0.5));
+        pCnt.set(key, (pCnt.get(key) || 0) + 1);
+      }
+      let best = Infinity, ba = -1, bb = -1;
+      for (const [key, ps] of pSum) {
+        const a = Math.floor(key / M), b = key % M;
+        const na = cnt[a], nb = cnt[b];
+        const dl = sL[a] / na - sL[b] / nb, da = sA[a] / na - sA[b] / nb, db = sB[a] / na - sB[b] / nb;
+        const border = 0.6 + 2.4 * (ps / pCnt.get(key));
+        const dist = Math.sqrt(dl * dl + da * da + db * db) * Math.pow((na * nb) / (na + nb), 0.3) * border;
+        if (dist < best) { best = dist; ba = a; bb = b; }
+      }
+      if (ba < 0) break;
+      for (let i = 0; i < M; i++) if (cid[i] === bb) cid[i] = ba;
+      sL[ba] += sL[bb]; sA[ba] += sA[bb]; sB[ba] += sB[bb]; cnt[ba] += cnt[bb];
+      alive--;
+    }
+    const map = new Map(), out = new Int32Array(M);
+    for (let i = 0; i < M; i++) {
+      if (!map.has(cid[i])) map.set(cid[i], map.size);
+      out[i] = map.get(cid[i]);
+    }
+    return out;
+  }
+
+  // Clean, evenly lit versions of each region's colour for the reference board.
+  function displayColors(labs, regions, K) {
+    const acc = Array.from({ length: K }, () => [0, 0, 0, 0]);
+    for (let i = 0; i < regions.length; i++) {
+      const a = acc[regions[i]];
+      if (!a) continue;
+      a[0] += labs[i][0]; a[1] += labs[i][1]; a[2] += labs[i][2]; a[3]++;
+    }
+    const means = acc.map(a => (a[3] ? [a[0] / a[3], a[1] / a[3], a[2] / a[3]] : [80, 0, 0]));
+    const Ls = means.map(m => m[0]);
+    const lo = Math.min(...Ls), hi = Math.max(...Ls);
+    return means.map(([L, a, b]) => {
+      const L2 = hi - lo > 6 ? 66 + ((L - lo) / (hi - lo)) * 22 : 78;
+      const c = Math.hypot(a, b);
+      let k = 1.3;
+      if (c * k > 62) k = 62 / Math.max(c, 1e-6);
+      const rgb = lab2rgb([L2, a * k, b * k]);
+      return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+    });
+  }
+
+  // Exact solver: every row, column and region needs exactly one queen, and no two queens
+  // may touch, including diagonally. Always branches on the most constrained unit.
+  function solve(N, regions, maxSolutions = 2, nodeLimit = 300000) {
+    const M = N * N;
+    let R = 0;
+    for (let i = 0; i < M; i++) if (regions[i] + 1 > R) R = regions[i] + 1;
+    const U = 2 * N + R;
+    const unitCells = Array.from({ length: U }, () => []);
+    const nbrs = [];
+    for (let i = 0; i < M; i++) {
+      const r = (i / N) | 0, c = i % N;
+      unitCells[r].push(i); unitCells[N + c].push(i); unitCells[2 * N + regions[i]].push(i);
+      const list = [];
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < N && cc >= 0 && cc < N) list.push(rr * N + cc);
+      }
+      nbrs.push(list);
+    }
+    const solutions = [], queens = [];
+    let nodes = 0, aborted = false;
+    function rec(avail, done) {
+      if (++nodes > nodeLimit) { aborted = true; return true; }
+      if (queens.length === N) {
+        for (let u = 0; u < U; u++) if (!done[u]) return false;
+        solutions.push(queens.slice().sort((a, b) => a - b));
+        return solutions.length >= maxSolutions;
+      }
+      let bestU = -1, bestCnt = Infinity;
+      for (let u = 0; u < U; u++) {
+        if (done[u]) continue;
+        let cnt = 0;
+        for (const i of unitCells[u]) if (avail[i]) cnt++;
+        if (cnt === 0) return false;
+        if (cnt < bestCnt) { bestCnt = cnt; bestU = u; if (cnt === 1) break; }
+      }
+      if (bestU < 0) return false;
+      for (const i of unitCells[bestU]) {
+        if (!avail[i]) continue;
+        const na = avail.slice(), nd = done.slice();
+        const units = [(i / N) | 0, N + (i % N), 2 * N + regions[i]];
+        for (const u of units) { nd[u] = 1; for (const j of unitCells[u]) na[j] = 0; }
+        for (const j of nbrs[i]) na[j] = 0;
+        queens.push(i);
+        const stop = rec(na, nd);
+        queens.pop();
+        if (stop) return true;
+      }
+      return false;
+    }
+    rec(new Uint8Array(M).fill(1), new Uint8Array(U));
+    return { solutions, aborted, nodes };
+  }
+
+  function analyze(img, corners, nOverride) {
+    const H = homography(corners);
+    let side = 0;
+    for (let i = 0; i < 4; i++) side += Math.hypot(corners[(i + 1) % 4][0] - corners[i][0], corners[(i + 1) % 4][1] - corners[i][1]);
+    side /= 4;
+    const S = 480;
+    const ss = Math.max(1, Math.min(3, Math.round(side / S)));
+    const wp = warp(img, H, S, ss);
+    const grid = detectGridSize(wp, 5, 13);
+    const N = nOverride || grid.n;
+    const rgbs = sampleCells(wp, N);
+    const labs = rgbs.map(rgb2lab);
+    const borders = measureBorders(wp, N, gridEdges(N));
+    const regions = clusterRegions(labs, N, N, borders.p);
+    return { N, autoN: grid.n, scores: grid.scores, rgbs, labs, regions, bordersReliable: borders.reliable };
+  }
+
+  return { homography, project, warp, detectBoard, detectGridSize, sampleCells, rgb2lab, lab2rgb, gridEdges, measureBorders, clusterRegions, displayColors, solve, analyze };
+})();
+// ==CORE END==
+
+// ---------------------------------------------------------------------------------------
+// User interface
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const els = {
+    start: $('start'), result: $('result'), demo: $('demo'),
+    btnScan: $('btn-scan'), btnUpload: $('btn-upload'), file: $('file'),
+    camera: $('camera'), video: $('video'), guide: $('guide'), btnShutter: $('btn-shutter'), btnCamClose: $('btn-cam-close'),
+    live: $('live'), camHint: $('cam-hint'),
+    btnNew: $('btn-new'), board: $('board'), status: $('status'),
+    keyWrap: $('key-wrap'), key: $('key'), keySr: $('key-sr'),
+    btnCopy: $('btn-copy'), btnFix: $('btn-fix'), palette: $('palette'), swatches: $('swatches'),
+    photo: $('photo'), photoWrap: $('photo-wrap'),
+    nMinus: $('n-minus'), nPlus: $('n-plus'), nVal: $('n-val'), nAuto: $('n-auto'),
+    btnReset: $('btn-reset'), btnFull: $('btn-full'), toast: $('toast')
+  };
+
+  const GOLD = '#F2B705', INK = '#2A1E3B';
+  const CROWN_D = 'M3 8.2 7.6 12 12 4.8 16.4 12 21 8.2 19.3 18H4.7Z M4.7 19.4h14.6v2.1H4.7Z';
+  const CROWN_SVG = '<svg class="crown" viewBox="0 0 24 24" aria-hidden="true"><path d="' + CROWN_D + '"/></svg>';
+  let crownPath = null;
+
+  const state = {
+    work: null, corners: null, defaultCorners: null, view: null, fullView: false,
+    nManual: null, N: 0, regions: null, labs: null, colors: [],
+    solution: null, info: null, editing: false, paint: 0,
+    drag: null, disp: null, stream: null, liveTimer: 0, liveQuad: null, kbCorner: 0
+  };
+
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  let toastTimer = 0;
+  function showToast(msg, sticky) {
+    els.toast.textContent = msg;
+    els.toast.hidden = false;
+    clearTimeout(toastTimer);
+    if (!sticky) toastTimer = setTimeout(() => { els.toast.hidden = true; }, Math.max(6000, msg.length * 70));
+  }
+  function hideToast() { clearTimeout(toastTimer); els.toast.hidden = true; }
+
+  function setScreen(name) {
+    els.start.hidden = name !== 'start';
+    els.result.hidden = name !== 'result';
+  }
+
+  // ---------- Board rendering ----------
+  function renderBoard(el, N, regions, colors, sol, opts) {
+    el.style.setProperty('--n', N);
+    el.classList.toggle('animate', !!opts.animate);
+    el.classList.toggle('editing', !!opts.editing);
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const i = r * N + c, g = regions[i];
+        const cell = document.createElement(opts.interactive ? 'button' : 'div');
+        cell.className = 'cell';
+        if (opts.interactive) {
+          cell.type = 'button';
+          cell.dataset.i = i;
+          cell.tabIndex = opts.editing ? 0 : -1;
+        }
+        const side = (rr, cc) => (rr < 0 || cc < 0 || rr >= N || cc >= N) ? 'e' : regions[rr * N + cc] !== g ? 'k' : 'n';
+        cell.dataset.t = side(r - 1, c);
+        cell.dataset.r = side(r, c + 1);
+        cell.dataset.b = side(r + 1, c);
+        cell.dataset.l = side(r, c - 1);
+        cell.style.background = colors[g] || '#ccc';
+        const isQueen = sol && sol[r] === c;
+        if (isQueen) {
+          cell.innerHTML = CROWN_SVG;
+          cell.firstChild.style.setProperty('--i', r);
+        }
+        if (opts.interactive) cell.setAttribute('aria-label', 'Row ' + (r + 1) + ', column ' + (c + 1) + ', color ' + (g + 1) + (isQueen ? ', queen' : ''));
+        frag.appendChild(cell);
+      }
+    }
+    el.replaceChildren(frag);
+  }
+
+  // ---------- Loading images ----------
+  function loadSource(src, sw, sh, guide) {
+    const MAX = 1400;
+    const sc = Math.min(1, MAX / Math.max(sw, sh));
+    const w = Math.max(1, Math.round(sw * sc)), h = Math.max(1, Math.round(sh * sc));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(src, 0, 0, w, h);
+    const id = ctx.getImageData(0, 0, w, h);
+    state.work = { canvas: cv, img: { w, h, data: id.data } };
+
+    const ds = Math.min(1, 420 / Math.max(w, h));
+    const dw = Math.max(1, Math.round(w * ds)), dh = Math.max(1, Math.round(h * ds));
+    const dc = document.createElement('canvas');
+    dc.width = dw; dc.height = dh;
+    const dctx = dc.getContext('2d', { willReadFrequently: true });
+    dctx.drawImage(cv, 0, 0, dw, dh);
+    const small = { w: dw, h: dh, data: dctx.getImageData(0, 0, dw, dh).data };
+    // A sharper copy for tracing thin grid lines.
+    const ms = Math.min(1, 640 / Math.max(w, h));
+    const mw = Math.max(1, Math.round(w * ms)), mh = Math.max(1, Math.round(h * ms));
+    const mc = document.createElement('canvas');
+    mc.width = mw; mc.height = mh;
+    const mctx = mc.getContext('2d', { willReadFrequently: true });
+    mctx.drawImage(cv, 0, 0, mw, mh);
+    const sharp = { w: mw, h: mh, data: mctx.getImageData(0, 0, mw, mh).data };
+
+    const g = guide ? { x: guide.x * sc, y: guide.y * sc, w: guide.w * sc, h: guide.h * sc } : null;
+    let roi = { x: 0, y: 0, w: dw, h: dh };
+    if (g) {
+      const m = 0.12 * g.w;
+      roi = { x: (g.x - m) * ds, y: (g.y - m) * ds, w: (g.w + 2 * m) * ds, h: (g.h + 2 * m) * ds };
+    }
+    let found = Core.detectBoard(small, roi, { rejectCut: !!g }, sharp);
+    if ((!found || found.strength < 0.3) && g) found = Core.detectBoard(small, { x: 0, y: 0, w: dw, h: dh }, null, sharp);
+    if (found && found.strength < 0.3) found = null;
+    let corners;
+    if (found) corners = found.map(([x, y]) => [x / ds, y / ds]);
+    else if (g) corners = [[g.x, g.y], [g.x + g.w, g.y], [g.x + g.w, g.y + g.h], [g.x, g.y + g.h]];
+    else {
+      const s = Math.min(w, h) * 0.8, x = (w - s) / 2, y = (h - s) / 2;
+      corners = [[x, y], [x + s, y], [x + s, y + s], [x, y + s]];
+    }
+    corners = corners.map(([x, y]) => [clamp(x, 0, w), clamp(y, 0, h)]);
+    state.defaultCorners = corners.map(p => p.slice());
+    state.corners = corners.map(p => p.slice());
+    state.nManual = null;
+    state.fullView = false;
+    state.editing = false;
+    state.paint = 0;
+    setScreen('result');
+    computeView();
+    runAnalysis(true);
+    window.scrollTo(0, 0);
+    if (!found) showToast("The board wasn't found automatically. Drag the gold corners onto it under Scan alignment.");
+  }
+
+  // Decode with the browser's own image support. Uses onload rather than img.decode(),
+  // which some Safari versions reject for images that load fine.
+  function decodeBlob(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => resolve({ img, done: () => URL.revokeObjectURL(url) });
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
+  // iPhone photos are often HEIC/HEIF. Recognise them from the file's first bytes, since the
+  // name and type aren't always set.
+  async function isHeif(file) {
+    if (/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name || '')) return true;
+    try {
+      const b = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+      const txt = String.fromCharCode.apply(null, b);
+      if (txt.slice(4, 8) !== 'ftyp') return false;
+      return /heic|heix|heim|heis|hevc|hevx|mif1|msf1/.test(txt.slice(8, 64)) && !/avif/.test(txt.slice(8, 12));
+    } catch (e) { return false; }
+  }
+
+  // HEIC converter, downloaded only the first time someone opens a HEIC photo. The photo is
+  // converted on the device; it is never uploaded.
+  const HEIC_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+  let heicLibPromise = null;
+  function loadHeicLib() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (!heicLibPromise) {
+      heicLibPromise = new Promise((resolve, reject) => {
+        const sc = document.createElement('script');
+        sc.src = HEIC_LIB;
+        sc.async = true;
+        sc.onload = () => (window.heic2any ? resolve(window.heic2any) : reject(new Error('network')));
+        sc.onerror = () => reject(new Error('network'));
+        document.head.appendChild(sc);
+      }).catch(err => { heicLibPromise = null; throw err; });
+    }
+    return heicLibPromise;
+  }
+
+  const FORMAT_TIP = 'To avoid this, set iPhone Settings, Camera, Formats to Most Compatible so new photos save as JPEG.';
+  let opening = false;
+  function setOpening(on) {
+    opening = on;
+    els.btnUpload.disabled = on;
+    els.btnUpload.textContent = on ? 'Opening photo…' : 'Upload photo';
+  }
+
+  async function loadFile(file) {
+    if (!file || opening) return;
+    setOpening(true);
+    let decoded = null;
+    try {
+      try {
+        decoded = await decodeBlob(file);
+      } catch (nativeErr) {
+        if (!(await isHeif(file))) {
+          const kind = file.type || (file.name && file.name.split('.').pop()) || 'unknown';
+          showToast("That file couldn't be opened as an image (" + kind + '). Try a PNG or JPEG.');
+          return;
+        }
+        showToast('Converting the HEIC photo. This can take a few seconds.', true);
+        let convert;
+        try { convert = await loadHeicLib(); } catch (e) {
+          showToast("This photo is HEIC, and the converter couldn't be downloaded. Check your connection and try again. " + FORMAT_TIP);
+          return;
+        }
+        let out;
+        try { out = await convert({ blob: file, toType: 'image/jpeg', quality: 0.92 }); } catch (e) {
+          showToast("This HEIC photo couldn't be converted. Try a screenshot instead. " + FORMAT_TIP);
+          return;
+        }
+        const jpeg = Array.isArray(out) ? out[0] : out;
+        try { decoded = await decodeBlob(jpeg); } catch (e) {
+          showToast("This HEIC photo couldn't be converted. Try a screenshot instead. " + FORMAT_TIP);
+          return;
+        }
+        hideToast();
+      }
+      const { img, done } = decoded;
+      try { loadSource(img, img.naturalWidth, img.naturalHeight, null); } finally { done(); }
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  // ---------- Camera ----------
+  async function openCamera() {
+    let framed = false;
+    try { framed = window.self !== window.top; } catch (e) { framed = true; }
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('The camera needs a secure (https) page and a supported browser. Use Upload photo instead; it can take a picture too.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+      state.stream = stream;
+      els.video.srcObject = stream;
+      els.camera.hidden = false;
+      document.body.classList.add('cam-open');
+      try { await els.video.play(); } catch (e) { /* autoplay attribute covers this */ }
+      els.btnShutter.focus();
+      clearTimeout(state.liveTimer);
+      state.liveTimer = setTimeout(liveTick, 300);
+    } catch (err) {
+      const n = err && err.name;
+      if (framed && n !== 'NotFoundError') {
+        showToast("The camera can't be used while this page is shown inside another app or preview. Open the page directly in Safari or Chrome, or use Upload photo; it can take a picture too.");
+      } else if (n === 'NotAllowedError' || n === 'SecurityError') {
+        showToast("Camera access is blocked for this site. On iPhone Safari, tap the page menu in the address bar, choose Website Settings, and set Camera to Allow. Or use Upload photo; it can take a picture too.");
+      } else if (n === 'NotFoundError' || n === 'OverconstrainedError') {
+        showToast('No usable camera was found. Use Upload photo instead.');
+      } else {
+        showToast("The camera couldn't start. Use Upload photo instead; it can take a picture too.");
+      }
+    }
+  }
+
+  // Where the video frame sits on screen (object-fit: cover) and where the guide square
+  // falls in video pixels.
+  function videoGeometry() {
+    const v = els.video, vw = v.videoWidth, vh = v.videoHeight;
+    const vr = v.getBoundingClientRect(), gr = els.guide.getBoundingClientRect();
+    const s = Math.max(vr.width / vw, vr.height / vh);
+    const ox = (vr.width - vw * s) / 2, oy = (vr.height - vh * s) / 2;
+    return {
+      vw, vh, s, ox, oy, cssW: vr.width, cssH: vr.height,
+      guide: { x: (gr.left - vr.left - ox) / s, y: (gr.top - vr.top - oy) / s, w: gr.width / s, h: gr.height / s }
+    };
+  }
+
+  const liveSmall = document.createElement('canvas'), liveSharp = document.createElement('canvas');
+  function grab(canvas, maxDim, vw, vh) {
+    const k = Math.min(1, maxDim / Math.max(vw, vh));
+    const w = Math.max(1, Math.round(vw * k)), h = Math.max(1, Math.round(vh * k));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(els.video, 0, 0, w, h);
+    return { k, img: { w, h, data: ctx.getImageData(0, 0, w, h).data } };
+  }
+
+  // Look for the board a few times a second and outline it once it's locked on.
+  function liveTick() {
+    state.liveTimer = 0;
+    if (!state.stream || els.camera.hidden) return;
+    const v = els.video;
+    if (v.videoWidth && v.videoHeight && v.readyState >= 2) {
+      try {
+        const geo = videoGeometry();
+        const a = grab(liveSmall, 420, geo.vw, geo.vh), b = grab(liveSharp, 640, geo.vw, geo.vh);
+        const g = geo.guide, m = 0.12 * g.w;
+        const roi = { x: (g.x - m) * a.k, y: (g.y - m) * a.k, w: (g.w + 2 * m) * a.k, h: (g.h + 2 * m) * a.k };
+        const q = Core.detectBoard(a.img, roi, { rejectCut: true }, b.img);
+        state.liveQuad = q && q.strength > 0.45 ? q.map(([x, y]) => [x / a.k, y / a.k]) : null;
+        drawLive(geo);
+      } catch (e) { state.liveQuad = null; }
+    }
+    state.liveTimer = setTimeout(liveTick, 250);
+  }
+
+  function drawLive(geo) {
+    const cv = els.live, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = Math.round(geo.cssW * dpr), H = Math.round(geo.cssH * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, geo.cssW, geo.cssH);
+    const locked = !!state.liveQuad;
+    els.camera.classList.toggle('locked', locked);
+    const hint = locked ? 'Board found. Hold steady and capture.' : 'Fit the board inside the square';
+    if (els.camHint.textContent !== hint) els.camHint.textContent = hint;
+    if (!locked) return;
+    const pts = state.liveQuad.map(([x, y]) => [geo.ox + x * geo.s, geo.oy + y * geo.s]);
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(12, 8, 18, 0.55)'; ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#F6C431'; ctx.stroke();
+  }
+
+  function closeCamera() {
+    clearTimeout(state.liveTimer);
+    state.liveTimer = 0;
+    state.liveQuad = null;
+    els.camera.classList.remove('locked');
+    if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
+    els.video.srcObject = null;
+    els.camera.hidden = true;
+    document.body.classList.remove('cam-open');
+  }
+
+  function capture() {
+    const v = els.video, vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh) { showToast('The camera is still starting. Try again in a moment.'); return; }
+    const guide = videoGeometry().guide;
+    const c = document.createElement('canvas');
+    c.width = vw; c.height = vh;
+    c.getContext('2d').drawImage(v, 0, 0, vw, vh);
+    closeCamera();
+    loadSource(c, vw, vh, guide);
+  }
+
+  // ---------- Analysis ----------
+  function runAnalysis(animate) {
+    const a = Core.analyze(state.work.img, state.corners, state.nManual);
+    state.N = a.N;
+    state.regions = Array.from(a.regions);
+    state.labs = a.labs;
+    state.colors = Core.displayColors(a.labs, a.regions, a.N);
+    state.paint = Math.min(state.paint, a.N - 1);
+    solveAndRender(animate);
+  }
+
+  function solveAndRender(animate) {
+    const N = state.N;
+    const res = Core.solve(N, state.regions, 2, 300000);
+    state.info = res;
+    state.solution = null;
+    if (res.solutions.length) {
+      const cols = new Array(N);
+      for (const i of res.solutions[0]) cols[(i / N) | 0] = i % N;
+      state.solution = cols;
+    }
+    renderBoard(els.board, N, state.regions, state.colors, state.solution, { animate, interactive: true, editing: state.editing });
+    renderStatus();
+    renderKey();
+    renderPalette();
+    renderControls();
+    drawPhoto();
+  }
+
+  function renderStatus() {
+    const info = state.info, N = state.N;
+    let cls, text;
+    if (!info.solutions.length && info.aborted) {
+      cls = 'error';
+      text = 'The solver stopped searching, which usually means the colors were misread. Check the alignment below, or fix the colors.';
+    } else if (!info.solutions.length) {
+      cls = 'error';
+      text = 'No arrangement fits these regions. Check that the grid sits on the board below, that the size matches, and that the colors match your screen.';
+    } else if (info.solutions.length > 1) {
+      cls = 'warn';
+      text = 'Solved, but these regions allow more than one answer, so a cell may be misread. Compare the colors with your screen.';
+    } else {
+      cls = 'ok';
+      text = 'Solved. This ' + N + ' × ' + N + ' board has exactly one answer.';
+    }
+    els.status.className = 'status ' + cls;
+    els.status.textContent = text;
+  }
+
+  function renderKey() {
+    const sol = state.solution, N = state.N;
+    els.keyWrap.hidden = !sol;
+    els.btnCopy.disabled = !sol;
+    if (!sol) return;
+    // Big boards get two strips so every column stays readable on a phone.
+    const per = N >= 12 ? Math.ceil(N / 2) : N;
+    const kf = N >= 10 ? '1.125rem' : '1.3rem';
+    let html = '';
+    for (let start = 0; start < N; start += per) {
+      const end = Math.min(N, start + per);
+      html += '<div class="key" style="--n:' + per + ';--kf:' + kf + '"><span class="kh">Row</span>';
+      for (let r = start; r < end; r++) html += '<span class="kr" style="--c:' + state.colors[state.regions[r * N + sol[r]]] + '">' + (r + 1) + '</span>';
+      for (let r = end; r < start + per; r++) html += '<span class="kr" style="--c:transparent"></span>';
+      html += '<span class="kh kh2">Col</span>';
+      for (let r = start; r < end; r++) html += '<span class="kc">' + (sol[r] + 1) + '</span>';
+      for (let r = end; r < start + per; r++) html += '<span class="kc"></span>';
+      html += '</div>';
+    }
+    els.key.innerHTML = html;
+    els.keySr.innerHTML = sol.map((c, r) => '<li>Row ' + (r + 1) + ': column ' + (c + 1) + '</li>').join('');
+  }
+
+  function renderPalette() {
+    els.palette.hidden = !state.editing;
+    els.btnFix.setAttribute('aria-pressed', String(state.editing));
+    els.btnFix.textContent = state.editing ? 'Done fixing' : 'Fix colors';
+    if (!state.editing) return;
+    const frag = document.createDocumentFragment();
+    state.colors.forEach((col, g) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch';
+      b.style.background = col;
+      b.textContent = g + 1;
+      b.dataset.g = g;
+      b.setAttribute('aria-label', 'Color ' + (g + 1));
+      b.setAttribute('aria-pressed', String(g === state.paint));
+      frag.appendChild(b);
+    });
+    els.swatches.replaceChildren(frag);
+  }
+
+  function renderControls() {
+    els.nVal.textContent = state.N + ' × ' + state.N;
+    els.nMinus.disabled = state.N <= 4;
+    els.nPlus.disabled = state.N >= 16;
+    els.nAuto.setAttribute('aria-pressed', String(state.nManual == null));
+    els.btnFull.textContent = state.fullView ? 'Zoom to board' : 'Show whole photo';
+  }
+
+  // ---------- Photo canvas with draggable corners ----------
+  function computeView() {
+    const { w, h } = state.work.img;
+    if (state.fullView) { state.view = { x: 0, y: 0, w, h }; return; }
+    const xs = state.corners.map(p => p[0]), ys = state.corners.map(p => p[1]);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const m = Math.max(x1 - x0, y1 - y0) * 0.28 + 20;
+    x0 = clamp(x0 - m, 0, w); x1 = clamp(x1 + m, 0, w);
+    y0 = clamp(y0 - m, 0, h); y1 = clamp(y1 + m, 0, h);
+    state.view = { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+  }
+
+  function drawClipped(ctx, img, sx, sy, sw, sh, dx, dy, dw, dh) {
+    const W = img.width, H = img.height, kx = dw / sw, ky = dh / sh;
+    const x0 = Math.max(0, sx), y0 = Math.max(0, sy), x1 = Math.min(W, sx + sw), y1 = Math.min(H, sy + sh);
+    if (x1 <= x0 || y1 <= y0) return;
+    ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0, dx + (x0 - sx) * kx, dy + (y0 - sy) * ky, (x1 - x0) * kx, (y1 - y0) * ky);
+  }
+
+  let drawQueued = false;
+  function requestDraw() {
+    if (drawQueued) return;
+    drawQueued = true;
+    requestAnimationFrame(() => { drawQueued = false; drawPhoto(); });
+  }
+
+  function drawPhoto() {
+    if (!state.work || els.result.hidden) return;
+    const cv = els.photo, v = state.view;
+    const wrapW = Math.max(100, els.photoWrap.clientWidth - 16);
+    const maxH = Math.max(240, Math.min(window.innerHeight * 0.58, 640));
+    const s = Math.min(wrapW / v.w, maxH / v.h);
+    const cw = Math.max(1, Math.floor(v.w * s)), ch = Math.max(1, Math.floor(v.h * s));
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr);
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    cv.style.width = cw + 'px';
+    cv.style.height = ch + 'px';
+    state.disp = { s, v };
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, cw, ch);
+    drawClipped(ctx, state.work.canvas, v.x, v.y, v.w, v.h, 0, 0, cw, ch);
+
+    const P = ([x, y]) => [(x - v.x) * s, (y - v.y) * s];
+    const q = state.corners.map(P);
+    ctx.save();
+    ctx.fillStyle = 'rgba(24, 16, 34, 0.5)';
+    ctx.beginPath();
+    ctx.rect(0, 0, cw, ch);
+    ctx.moveTo(q[0][0], q[0][1]);
+    for (let k = 1; k < 4; k++) ctx.lineTo(q[k][0], q[k][1]);
+    ctx.closePath();
+    ctx.fill('evenodd');
+    ctx.restore();
+
+    const H = Core.homography(state.corners);
+    const pr = (u, w) => P(Core.project(H, u, w));
+    const N = state.N;
+    for (const [lw, col] of [[3, 'rgba(24, 16, 34, 0.55)'], [1.25, 'rgba(255, 255, 255, 0.95)']]) {
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = col;
+      ctx.beginPath();
+      for (let k = 0; k <= N; k++) {
+        const t = k / N;
+        let a = pr(t, 0), b = pr(t, 1);
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        a = pr(0, t); b = pr(1, t);
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+      }
+      ctx.stroke();
+    }
+
+    if (state.solution && !state.drag) {
+      if (!crownPath) crownPath = new Path2D(CROWN_D);
+      state.solution.forEach((c, r) => {
+        const [x, y] = pr((c + 0.5) / N, (r + 0.5) / N);
+        const a = pr(c / N, (r + 0.5) / N), b = pr((c + 1) / N, (r + 0.5) / N);
+        const rad = Math.max(6, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.36);
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.fillStyle = GOLD; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.save();
+        const k = (rad * 1.4) / 24;
+        ctx.translate(x - 12 * k, y - 12.6 * k);
+        ctx.scale(k, k);
+        ctx.fillStyle = INK;
+        ctx.fill(crownPath);
+        ctx.restore();
+      });
+    }
+
+    const kbActive = document.activeElement === els.photo && !state.drag;
+    q.forEach(([x, y], k) => {
+      const active = (state.drag && state.drag.k === k) || (kbActive && state.kbCorner === k);
+      const r = active ? 14 : 11;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.lineWidth = 7; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.lineWidth = 4; ctx.strokeStyle = GOLD; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = GOLD; ctx.fill();
+      if (active) {
+        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+        ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+      }
+    });
+
+    if (state.drag) drawLoupe(ctx, cw, ch, s, v);
+  }
+
+  function drawLoupe(ctx, cw, ch, s, v) {
+    const [px, py] = state.corners[state.drag.k];
+    const R = Math.min(64, cw * 0.2), zoom = 3.2;
+    const sx = (px - v.x) * s;
+    const cx = sx < cw / 2 ? cw - R - 10 : R + 10, cy = R + 10;
+    const half = R / (s * zoom);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#000'; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    drawClipped(ctx, state.work.canvas, px - half, py - half, half * 2, half * 2, cx - R, cy - R, 2 * R, 2 * R);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, cy, R + 2.5, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function pointerToImage(e) {
+    const r = els.photo.getBoundingClientRect(), d = state.disp;
+    return [(e.clientX - r.left) / d.s + d.v.x, (e.clientY - r.top) / d.s + d.v.y];
+  }
+
+  function nearestCorner(e) {
+    const r = els.photo.getBoundingClientRect(), d = state.disp;
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = -1, bd = e.pointerType === 'mouse' ? 22 : 36;
+    state.corners.forEach(([x, y], k) => {
+      const dd = Math.hypot((x - d.v.x) * d.s - mx, (y - d.v.y) * d.s - my);
+      if (dd < bd) { bd = dd; best = k; }
+    });
+    return best;
+  }
+
+  els.photo.addEventListener('pointerdown', e => {
+    if (!state.work || !state.disp) return;
+    const k = nearestCorner(e);
+    if (k < 0) return;
+    e.preventDefault();
+    els.photo.setPointerCapture(e.pointerId);
+    const [ix, iy] = pointerToImage(e);
+    state.drag = { k, dx: state.corners[k][0] - ix, dy: state.corners[k][1] - iy, id: e.pointerId };
+    requestDraw();
+  });
+  els.photo.addEventListener('pointermove', e => {
+    if (!state.disp) return;
+    if (!state.drag) {
+      els.photo.style.cursor = nearestCorner(e) >= 0 ? 'grab' : 'default';
+      return;
+    }
+    if (e.pointerId !== state.drag.id) return;
+    const [ix, iy] = pointerToImage(e), v = state.view;
+    state.corners[state.drag.k] = [clamp(ix + state.drag.dx, v.x, v.x + v.w), clamp(iy + state.drag.dy, v.y, v.y + v.h)];
+    els.photo.style.cursor = 'grabbing';
+    requestDraw();
+  });
+  const endDrag = e => {
+    if (!state.drag || e.pointerId !== state.drag.id) return;
+    state.drag = null;
+    els.photo.style.cursor = 'grab';
+    runAnalysis(false);
+  };
+  let kbTimer = 0;
+  els.photo.addEventListener('keydown', e => {
+    if (!state.work || !state.disp) return;
+    const k = state.kbCorner;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      state.kbCorner = (k + 1) % 4;
+      drawPhoto();
+      return;
+    }
+    const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const d = dirs[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const step = (e.shiftKey ? 10 : 1) / state.disp.s, v = state.view;
+    const [x, y] = state.corners[k];
+    state.corners[k] = [clamp(x + d[0] * step, v.x, v.x + v.w), clamp(y + d[1] * step, v.y, v.y + v.h)];
+    drawPhoto();
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(() => runAnalysis(false), 350);
+  });
+  els.photo.addEventListener('focus', drawPhoto);
+  els.photo.addEventListener('blur', drawPhoto);
+  els.photo.addEventListener('pointerup', endDrag);
+  els.photo.addEventListener('pointercancel', endDrag);
+
+  // ---------- Controls ----------
+  els.btnScan.addEventListener('click', openCamera);
+  els.btnUpload.addEventListener('click', () => els.file.click());
+  els.file.addEventListener('change', () => {
+    const f = els.file.files && els.file.files[0];
+    els.file.value = '';
+    loadFile(f);
+  });
+  els.btnShutter.addEventListener('click', capture);
+  els.btnCamClose.addEventListener('click', closeCamera);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !els.camera.hidden) closeCamera(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state.stream) closeCamera(); });
+
+  els.btnNew.addEventListener('click', () => {
+    state.editing = false;
+    setScreen('start');
+    window.scrollTo(0, 0);
+  });
+
+  els.nMinus.addEventListener('click', () => { state.nManual = clamp(state.N - 1, 4, 16); runAnalysis(true); });
+  els.nPlus.addEventListener('click', () => { state.nManual = clamp(state.N + 1, 4, 16); runAnalysis(true); });
+  els.nAuto.addEventListener('click', () => { if (state.nManual != null) { state.nManual = null; runAnalysis(true); } });
+  els.btnReset.addEventListener('click', () => {
+    state.corners = state.defaultCorners.map(p => p.slice());
+    computeView();
+    runAnalysis(false);
+  });
+  els.btnFull.addEventListener('click', () => {
+    state.fullView = !state.fullView;
+    computeView();
+    renderControls();
+    drawPhoto();
+  });
+
+  els.btnFix.addEventListener('click', () => {
+    state.editing = !state.editing;
+    renderBoard(els.board, state.N, state.regions, state.colors, state.solution, { animate: false, interactive: true, editing: state.editing });
+    renderPalette();
+  });
+  els.swatches.addEventListener('click', e => {
+    const b = e.target.closest('.swatch');
+    if (!b) return;
+    state.paint = +b.dataset.g;
+    els.swatches.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', String(+s.dataset.g === state.paint)));
+  });
+  els.board.addEventListener('click', e => {
+    if (!state.editing) return;
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    const i = +cell.dataset.i;
+    if (state.regions[i] === state.paint) return;
+    state.regions[i] = state.paint;
+    solveAndRender(false);
+    const again = els.board.querySelector('[data-i="' + i + '"]');
+    if (again) again.focus({ preventScroll: true });
+  });
+
+  els.btnCopy.addEventListener('click', async () => {
+    if (!state.solution) return;
+    const N = state.N;
+    const text = 'Queens solution (' + N + '×' + N + ', rows from the top, columns from the left)\n' +
+      state.solution.map((c, r) => 'Row ' + (r + 1) + ': column ' + (c + 1)).join('\n');
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove();
+    }
+    els.btnCopy.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => { els.btnCopy.textContent = 'Copy positions'; }, 1800);
+  });
+
+  document.addEventListener('paste', e => {
+    const files = e.clipboardData ? Array.from(e.clipboardData.files) : [];
+    const f = files.find(x => x.type.startsWith('image/'));
+    if (f) loadFile(f);
+  });
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    const files = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
+    const f = files.find(x => x.type.startsWith('image/'));
+    if (f) loadFile(f);
+  });
+  window.addEventListener('resize', requestDraw);
+
+  // ---------- Start screen demo board ----------
+  const demoRegions = [
+    0, 0, 1, 1, 1,
+    0, 0, 1, 2, 2,
+    0, 3, 3, 2, 2,
+    3, 3, 4, 4, 2,
+    3, 4, 4, 4, 4
+  ];
+  renderBoard(els.demo, 5, demoRegions, ['#BBA3E2', '#FFC992', '#96BEFF', '#B3DFA0', '#FF7B60'], [0, 2, 4, 1, 3], { animate: true, interactive: false });
+
+  // Exposed for automated testing.
+  window.__queens = { state, loadSource };
+})();
+</script>
+</body>
+</html>
